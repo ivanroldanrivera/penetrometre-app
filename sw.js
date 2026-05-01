@@ -1,5 +1,9 @@
 const CACHE = 'pdl-v1';
-const FILES = ['/', '/index.html', '/manifest.json'];
+const FILES = [
+  '/penetrometre-app/',
+  '/penetrometre-app/index.html',
+  '/penetrometre-app/manifest.json'
+];
 
 self.addEventListener('install', e => {
   e.waitUntil(
