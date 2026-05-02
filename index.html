@@ -11,113 +11,132 @@
 <title>PDL — Pénétromètre Dynamique Léger</title>
 <style>
   :root {
-    --bg: #F4F2EE; --bg2: #ECEAE5; --card: #FFFFFF; --border: #D6D2CA;
-    --text: #1A1714; --text2: #6B6560;
-    --blue: #185FA5; --blue-dark: #0C447C;
-    --green: #0F6E56; --red: #A32D2D;
-    --red-bg: #FCEBEB; --orange: #854F0B; --orange-bg: #FAEEDA;
-    --radius: 14px; --radius-sm: 9px;
+    --bg:#F4F2EE; --bg2:#ECEAE5; --card:#FFFFFF; --border:#D6D2CA;
+    --text:#1A1714; --text2:#6B6560;
+    --blue:#185FA5; --blue-dark:#0C447C;
+    --green:#0F6E56; --red:#A32D2D;
+    --red-bg:#FCEBEB; --orange:#854F0B; --orange-bg:#FAEEDA;
+    --radius:14px; --radius-sm:9px;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #161412; --bg2: #1E1B18; --card: #252119; --border: #3A3530;
-      --text: #F0EDE8; --text2: #8A847C; --red-bg: #2D1515;
-    }
+    :root { --bg:#161412; --bg2:#1E1B18; --card:#252119; --border:#3A3530; --text:#F0EDE8; --text2:#8A847C; --red-bg:#2D1515; }
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html { height: 100%; }
-  body {
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, 'Helvetica Neue', sans-serif;
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    min-height: 100%;
-  }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html { height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,'Helvetica Neue',sans-serif; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); min-height:100%; }
+  .app { max-width:480px; margin:0 auto; padding:0 12px 90px; }
 
-  .app { max-width: 480px; margin: 0 auto; padding: 0 12px 90px; }
+  .topbar { padding:14px 0 8px; }
+  .topbar-sub { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text2); }
+  .topbar-row { display:flex; justify-content:space-between; align-items:flex-end; margin-top:2px; }
+  .topbar-title { font-size:20px; color:var(--text); }
+  .save-chip { font-size:10px; color:var(--text2); background:var(--bg2); padding:3px 9px; border-radius:20px; border:0.5px solid var(--border); }
 
-  /* HEADER */
-  .topbar { padding: 14px 0 8px; }
-  .topbar-sub { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text2); }
-  .topbar-row { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 2px; }
-  .topbar-title { font-size: 20px; color: var(--text); }
-  .save-chip { font-size: 10px; color: var(--text2); background: var(--bg2); padding: 3px 9px; border-radius: 20px; border: 0.5px solid var(--border); }
+  .tabs { display:grid; grid-template-columns:1fr 1fr 1fr; background:var(--bg2); border-radius:var(--radius-sm); padding:3px; border:0.5px solid var(--border); margin-bottom:14px; }
+  .tab { padding:9px; font-size:13px; text-align:center; cursor:pointer; color:var(--text2); border-radius:7px; background:transparent; border:none; transition:all 0.15s; }
+  .tab.active { background:var(--card); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.12); }
 
-  /* TABS */
-  .tabs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; background: var(--bg2); border-radius: var(--radius-sm); padding: 3px; border: 0.5px solid var(--border); margin-bottom: 14px; }
-  .tab { padding: 9px; font-size: 13px; text-align: center; cursor: pointer; color: var(--text2); border-radius: 7px; background: transparent; border: none; transition: all 0.15s; }
-  .tab.active { background: var(--card); color: var(--text); box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+  .card { background:var(--card); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+  .clabel { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text2); margin-bottom:10px; }
 
-  /* CARDS */
-  .card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 12px; }
-  .clabel { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text2); margin-bottom: 10px; }
+  .depth-row { display:flex; align-items:baseline; gap:8px; margin-bottom:6px; }
+  .depth-num { font-size:52px; font-weight:200; color:var(--text); line-height:1; }
+  .depth-unit { font-size:20px; color:var(--text2); }
+  .layer-chip { font-size:11px; color:var(--text2); background:var(--bg2); border-radius:20px; padding:3px 10px; border:0.5px solid var(--border); display:inline-block; margin-bottom:16px; }
 
-  /* DEPTH */
-  .depth-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  .depth-num { font-size: 52px; font-weight: 200; color: var(--text); line-height: 1; }
-  .depth-unit { font-size: 20px; color: var(--text2); }
-  .layer-chip { font-size: 11px; color: var(--text2); background: var(--bg2); border-radius: 20px; padding: 3px 10px; border: 0.5px solid var(--border); display: inline-block; margin-bottom: 16px; }
+  .coup-center { text-align:center; margin-bottom:18px; }
+  .coup-num { font-size:88px; font-weight:200; color:var(--blue); line-height:1; letter-spacing:-3px; }
+  .coup-sub { font-size:11px; color:var(--text2); margin-top:4px; letter-spacing:0.06em; }
 
-  /* COUP COUNTER */
-  .coup-center { text-align: center; margin-bottom: 18px; }
-  .coup-num { font-size: 88px; font-weight: 200; color: var(--blue); line-height: 1; letter-spacing: -3px; }
-  .coup-sub { font-size: 11px; color: var(--text2); margin-top: 4px; letter-spacing: 0.06em; }
+  .coup-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .cbtn { border:none; border-radius:var(--radius-sm); cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:17px 8px; transition:transform 0.1s, opacity 0.1s; }
+  .cbtn:active { transform:scale(0.95); opacity:0.8; }
+  .cbtn-n { font-size:28px; font-weight:200; line-height:1; }
+  .cbtn-l { font-size:10px; letter-spacing:0.08em; text-transform:uppercase; margin-top:3px; opacity:0.7; }
+  .cbtn-m10 { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
+  .cbtn-m1  { background:var(--orange-bg); color:var(--orange); border:0.5px solid #FAC775; }
+  .cbtn-p1  { background:var(--blue); color:#fff; }
+  .cbtn-p10 { background:var(--blue-dark); color:#fff; }
 
-  /* COUP BUTTONS */
-  .coup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .cbtn { border: none; border-radius: var(--radius-sm); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 17px 8px; transition: transform 0.1s, opacity 0.1s; }
-  .cbtn:active { transform: scale(0.95); opacity: 0.8; }
-  .cbtn-n { font-size: 28px; font-weight: 200; line-height: 1; }
-  .cbtn-l { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 3px; opacity: 0.7; }
-  .cbtn-m10 { background: var(--red-bg); color: var(--red); border: 0.5px solid #F09595; }
-  .cbtn-m1  { background: var(--orange-bg); color: var(--orange); border: 0.5px solid #FAC775; }
-  .cbtn-p1  { background: var(--blue); color: #fff; }
-  .cbtn-p10 { background: var(--blue-dark); color: #fff; }
+  .btn-row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .btn-sm { padding:10px 8px; font-size:12px; background:var(--bg2); color:var(--text); border:0.5px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-sm:active { opacity:0.7; }
+  .btn-valider { width:100%; padding:17px; font-size:15px; background:var(--green); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; margin-bottom:8px; letter-spacing:0.04em; }
+  .btn-valider:active { opacity:0.85; transform:scale(0.99); }
+  .btn-refus { width:100%; padding:13px; font-size:13px; background:var(--card); color:var(--red); border:0.5px solid #F09595; border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-refus:active { opacity:0.75; }
 
-  /* BUTTONS */
-  .btn-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .btn-sm { padding: 10px 8px; font-size: 12px; background: var(--bg2); color: var(--text); border: 0.5px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
-  .btn-sm:active { opacity: 0.7; }
-  .btn-valider { width: 100%; padding: 17px; font-size: 15px; background: var(--green); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; margin-bottom: 8px; letter-spacing: 0.04em; }
-  .btn-valider:active { opacity: 0.85; transform: scale(0.99); }
-  .btn-refus { width: 100%; padding: 13px; font-size: 13px; background: var(--card); color: var(--red); border: 0.5px solid #F09595; border-radius: var(--radius-sm); cursor: pointer; }
-  .btn-refus:active { opacity: 0.75; }
-  .btn-export { padding: 13px; font-size: 13px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; }
-  .btn-export:active { opacity: 0.8; }
-  .btn-new { padding: 13px; font-size: 13px; background: var(--card); color: var(--red); border: 0.5px solid #F09595; border-radius: var(--radius-sm); cursor: pointer; }
-  .btn-new:active { opacity: 0.75; }
-  .btn-save { width: 100%; padding: 13px; font-size: 14px; background: var(--blue); color: #fff; border: none; border-radius: var(--radius-sm); cursor: pointer; margin-top: 8px; letter-spacing: 0.04em; }
-  .btn-save:active { opacity: 0.8; }
+  /* Données tab buttons */
+  .data-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+  .btn-blue { padding:13px; font-size:13px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-blue:active { opacity:0.8; }
+  .btn-red { padding:13px; font-size:13px; background:var(--card); color:var(--red); border:0.5px solid #F09595; border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-red:active { opacity:0.75; }
+  .btn-green { padding:13px; font-size:13px; background:var(--green); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-green:active { opacity:0.8; }
 
-  /* TABLE */
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text2); padding: 4px 6px; border-bottom: 0.5px solid var(--border); font-weight: normal; }
-  td { padding: 8px 6px; border-bottom: 0.5px solid var(--border); color: var(--text); }
-  tr:last-child td { border-bottom: none; }
-  .refus-row td { background: var(--red-bg); color: var(--red); }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; }
-  .b-ok   { background: #EAF3DE; color: #3B6D11; }
-  .b-warn { background: #FAEEDA; color: #854F0B; }
-  .b-stop { background: #FCEBEB; color: #A32D2D; }
+  /* GPS card */
+  .gps-card { background:var(--card); border:0.5px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:8px; }
+  .gps-row { display:flex; align-items:center; gap:10px; }
+  .gps-info { flex:1; }
+  .gps-coords { font-size:13px; color:var(--text); font-variant-numeric:tabular-nums; }
+  .gps-meta { font-size:10px; color:var(--text2); margin-top:2px; }
+  .gps-status { font-size:11px; color:var(--text2); }
+  .btn-gps { padding:10px 14px; font-size:13px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; white-space:nowrap; }
+  .btn-gps:active { opacity:0.8; }
+  .gps-dot { width:8px; height:8px; border-radius:50%; background:#ccc; flex-shrink:0; }
+  .gps-dot.ok { background:#3B6D11; }
+  .gps-dot.loading { background:var(--orange); animation:pulse 1s infinite; }
+  .gps-dot.error { background:var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-  /* STATS */
-  .stats-row { display: flex; justify-content: space-around; padding: 10px 0; }
-  .stat-col { text-align: center; }
-  .stat-val { font-size: 20px; font-weight: 200; }
-  .stat-lbl { font-size: 10px; color: var(--text2); letter-spacing: 0.06em; text-transform: uppercase; }
+  /* Sort toggle */
+  .sort-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .sort-btn { font-size:11px; color:var(--blue); background:none; border:0.5px solid var(--blue); border-radius:20px; padding:3px 10px; cursor:pointer; }
+  .sort-btn:active { opacity:0.7; }
 
-  /* CONFIG */
-  .irow { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .irow label { font-size: 12px; color: var(--text2); min-width: 90px; }
-  .irow input { flex: 1; padding: 9px 10px; font-size: 13px; border: 0.5px solid var(--border); border-radius: var(--radius-sm); background: var(--bg2); color: var(--text); }
+  /* Table */
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text2); padding:4px 6px; border-bottom:0.5px solid var(--border); font-weight:normal; }
+  td { padding:9px 6px; border-bottom:0.5px solid var(--border); color:var(--text); }
+  tr:last-child td { border-bottom:none; }
+  .refus-row td { background:var(--red-bg); color:var(--red); }
+  tr.data-row { cursor:pointer; }
+  tr.data-row:active td { background:var(--bg2); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; }
+  .b-ok { background:#EAF3DE; color:#3B6D11; }
+  .b-warn { background:#FAEEDA; color:#854F0B; }
+  .b-stop { background:#FCEBEB; color:#A32D2D; }
+  .edit-hint { font-size:10px; color:var(--text2); text-align:right; margin-bottom:4px; }
 
-  .empty { text-align: center; padding: 24px; color: var(--text2); font-size: 13px; }
-  .hidden { display: none; }
-  .data-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .stats-row { display:flex; justify-content:space-around; padding:10px 0; }
+  .stat-col { text-align:center; }
+  .stat-val { font-size:20px; font-weight:200; }
+  .stat-lbl { font-size:10px; color:var(--text2); letter-spacing:0.06em; text-transform:uppercase; }
 
-  /* INSTALL BANNER */
-  .install-banner { background: var(--blue); color: #fff; border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; font-size: 13px; line-height: 1.6; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  .install-banner button { background: rgba(255,255,255,0.2); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+  .irow { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .irow label { font-size:12px; color:var(--text2); min-width:90px; }
+  .irow input { flex:1; padding:9px 10px; font-size:13px; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); }
+  .btn-save { width:100%; padding:13px; font-size:14px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; margin-top:8px; }
+  .btn-save:active { opacity:0.8; }
+
+  /* Modal */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:100; display:flex; align-items:flex-end; justify-content:center; padding-bottom:env(safe-area-inset-bottom); }
+  .modal { background:var(--card); border-radius:var(--radius) var(--radius) 0 0; padding:24px 20px 20px; width:100%; max-width:480px; }
+  .modal-title { font-size:16px; margin-bottom:4px; }
+  .modal-sub { font-size:12px; color:var(--text2); margin-bottom:20px; }
+  .modal-input { width:100%; padding:12px; font-size:24px; text-align:center; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); margin-bottom:14px; }
+  .modal-btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .modal-btn { padding:12px; font-size:13px; border:none; border-radius:var(--radius-sm); cursor:pointer; }
+  .modal-cancel { background:var(--bg2); color:var(--text); }
+  .modal-delete { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
+  .modal-ok { background:var(--blue); color:#fff; }
+  .modal-btn:active { opacity:0.75; }
+
+  .install-banner { background:var(--blue); color:#fff; border-radius:var(--radius); padding:14px 16px; margin-bottom:12px; font-size:13px; line-height:1.6; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .install-banner button { background:rgba(255,255,255,0.2); border:none; color:#fff; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; white-space:nowrap; }
+  .empty { text-align:center; padding:24px; color:var(--text2); font-size:13px; }
+  .hidden { display:none; }
 </style>
 </head>
 <body>
@@ -142,7 +161,7 @@
     <button class="tab" onclick="showTab('config')">Config</button>
   </div>
 
-  <!-- SAISIE -->
+  <!-- ── SAISIE ── -->
   <div id="tab-saisie">
     <div class="card">
       <div class="clabel">Profondeur</div>
@@ -151,34 +170,22 @@
         <span class="depth-unit">cm</span>
       </div>
       <div class="layer-chip" id="layer-label">Couche 1 · 0–10 cm</div>
-
       <div class="coup-center">
         <div class="coup-num" id="coup-val">0</div>
         <div class="coup-sub">coups · passe de 10 cm</div>
       </div>
-
       <div class="coup-grid">
-        <button class="cbtn cbtn-m10" onclick="addCoup(-10)">
-          <span class="cbtn-n">−10</span><span class="cbtn-l">coups</span>
-        </button>
-        <button class="cbtn cbtn-p10" onclick="addCoup(10)">
-          <span class="cbtn-n">+10</span><span class="cbtn-l">coups</span>
-        </button>
-        <button class="cbtn cbtn-m1" onclick="addCoup(-1)">
-          <span class="cbtn-n">−1</span><span class="cbtn-l">coup</span>
-        </button>
-        <button class="cbtn cbtn-p1" onclick="addCoup(1)">
-          <span class="cbtn-n">+1</span><span class="cbtn-l">coup</span>
-        </button>
+        <button class="cbtn cbtn-m10" onclick="addCoup(-10)"><span class="cbtn-n">−10</span><span class="cbtn-l">coups</span></button>
+        <button class="cbtn cbtn-p10" onclick="addCoup(10)"><span class="cbtn-n">+10</span><span class="cbtn-l">coups</span></button>
+        <button class="cbtn cbtn-m1"  onclick="addCoup(-1)"><span class="cbtn-n">−1</span><span class="cbtn-l">coup</span></button>
+        <button class="cbtn cbtn-p1"  onclick="addCoup(1)"><span class="cbtn-n">+1</span><span class="cbtn-l">coup</span></button>
       </div>
-
       <div class="btn-row2">
         <button class="btn-sm" onclick="setCoupManual()">✎ Saisir valeur</button>
         <button class="btn-sm" onclick="resetCoup()">✕ Remettre à 0</button>
       </div>
-
       <button class="btn-valider" onclick="validerPasse()">✓ Valider passe (+10 cm)</button>
-      <button class="btn-refus" onclick="marquerRefus()">⚠ Refus</button>
+      <button class="btn-refus"   onclick="marquerRefus()">⚠ Refus</button>
     </div>
 
     <div class="card">
@@ -187,22 +194,45 @@
     </div>
   </div>
 
-  <!-- DONNEES -->
+  <!-- ── DONNÉES ── -->
   <div id="tab-donnees" class="hidden">
-    <div class="data-btns">
-      <button class="btn-export" onclick="exportCSV()">⬇ Exporter CSV</button>
-      <button class="btn-new" onclick="nouveauSondage()">🗑 Nouveau sondage</button>
+
+    <!-- GPS -->
+    <div class="gps-card">
+      <div class="clabel">Position GPS</div>
+      <div class="gps-row">
+        <div class="gps-dot" id="gps-dot"></div>
+        <div class="gps-info">
+          <div class="gps-coords" id="gps-coords">—</div>
+          <div class="gps-meta" id="gps-meta">Non enregistrée</div>
+        </div>
+        <button class="btn-gps" onclick="captureGPS()">📍 Capturer</button>
+      </div>
     </div>
+
+    <!-- Actions -->
+    <div class="data-btns">
+      <button class="btn-blue"  onclick="exportCSV()">⬇ Exporter CSV</button>
+      <button class="btn-red"   onclick="nouveauSondage()">🗑 Nouveau sondage</button>
+    </div>
+
+    <!-- Stats -->
     <div class="card" id="stats-card" style="display:none">
       <div class="stats-row" id="stats-row"></div>
     </div>
+
+    <!-- Table complète -->
     <div class="card">
-      <div class="clabel">Relevé complet</div>
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Relevé complet</div>
+        <button class="sort-btn" id="sort-btn" onclick="toggleSort()">↑ Surface → Profond</button>
+      </div>
+      <div class="edit-hint">Toucher un enregistrement pour modifier</div>
       <div id="full-table"><div class="empty">Aucune donnée</div></div>
     </div>
   </div>
 
-  <!-- CONFIG -->
+  <!-- ── CONFIG ── -->
   <div id="tab-config" class="hidden">
     <div class="card">
       <div class="clabel">Sondage</div>
@@ -219,23 +249,46 @@
     </div>
     <div class="card">
       <div class="clabel">À propos</div>
-      <p style="font-size:13px; color:var(--text2); line-height:1.7;">Application hors-ligne pour relevés PDL. Les données sont sauvegardées localement sur votre appareil. Exportez le CSV après chaque sondage pour conserver une copie permanente.</p>
+      <p style="font-size:13px;color:var(--text2);line-height:1.7;">Application hors-ligne pour relevés PDL. Données sauvegardées localement. Exportez le CSV après chaque sondage.</p>
     </div>
   </div>
+</div>
 
+<!-- ── MODAL ÉDITION ── -->
+<div class="modal-overlay hidden" id="edit-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Modifier la passe</div>
+    <div class="modal-sub" id="modal-sub"></div>
+    <input class="modal-input" type="number" id="modal-input" min="0" max="999"/>
+    <div style="margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" id="modal-refus" style="width:18px;height:18px;"/>
+        Marquer comme REFUS
+      </label>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-cancel" onclick="closeModalDirect()">Annuler</button>
+      <button class="modal-btn modal-delete" onclick="deleteRow()">🗑 Supprimer</button>
+      <button class="modal-btn modal-ok"     onclick="saveRow()">✓ Enregistrer</button>
+    </div>
+  </div>
 </div>
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────────
 let S = {
   passes: [], coups: 0,
-  cfg: { chantier:'', sondage:'SP1', operateur:'', date: today(), profMax:800, refusSeuil:50 }
+  gps: null,
+  cfg: { chantier:'', sondage:'SP1', operateur:'', date:today(), profMax:800, refusSeuil:50 }
 };
+let sortDesc = false; // false = surface→profond (asc), true = profond→surface (desc)
+let editIdx = -1;
 
 function today() { return new Date().toISOString().slice(0,10); }
 
 function load() {
-  try { const s = localStorage.getItem('pdl_v3'); if (s) S = JSON.parse(s); } catch(e){}
+  try { const s = localStorage.getItem('pdl_v3'); if (s) S = JSON.parse(s); } catch(e) {}
+  if (!S.gps) S.gps = null;
   syncFields(); render();
 }
 
@@ -246,6 +299,56 @@ function save() {
   } catch(e) { document.getElementById('save-status').textContent = '⚠ Erreur'; }
 }
 
+// ── GPS ────────────────────────────────────────────────────────────────
+function captureGPS() {
+  const dot = document.getElementById('gps-dot');
+  const coords = document.getElementById('gps-coords');
+  const meta = document.getElementById('gps-meta');
+
+  if (!navigator.geolocation) {
+    coords.textContent = 'GPS non disponible';
+    dot.className = 'gps-dot error'; return;
+  }
+
+  dot.className = 'gps-dot loading';
+  coords.textContent = 'Acquisition…';
+  meta.textContent = '';
+
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = pos.coords.latitude.toFixed(6);
+      const lon = pos.coords.longitude.toFixed(6);
+      const acc = Math.round(pos.coords.accuracy);
+      S.gps = { lat: parseFloat(lat), lon: parseFloat(lon), acc, ts: new Date().toISOString() };
+      save();
+      dot.className = 'gps-dot ok';
+      coords.textContent = lat + ', ' + lon;
+      meta.textContent = '± ' + acc + ' m · ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    },
+    err => {
+      dot.className = 'gps-dot error';
+      coords.textContent = 'Erreur GPS';
+      meta.textContent = err.code === 1 ? 'Autorisation refusée' : 'Signal indisponible';
+    },
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+function renderGPS() {
+  const dot = document.getElementById('gps-dot');
+  const coords = document.getElementById('gps-coords');
+  const meta = document.getElementById('gps-meta');
+  if (S.gps) {
+    dot.className = 'gps-dot ok';
+    coords.textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
+    meta.textContent = '± ' + S.gps.acc + ' m · ' + new Date(S.gps.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+  } else {
+    dot.className = 'gps-dot';
+    coords.textContent = '—';
+    meta.textContent = 'Non enregistrée';
+  }
+}
+
 // ── ACTIONS ────────────────────────────────────────────────────────────
 function depth() { return S.passes.length * 10; }
 
@@ -254,9 +357,7 @@ function addCoup(d) {
   S.coups = Math.max(0, S.coups + d);
   save(); render();
 }
-
 function resetCoup() { S.coups = 0; save(); render(); }
-
 function setCoupManual() {
   const v = prompt('Nombre de coups pour cette passe :', S.coups);
   if (v !== null) { const n = parseInt(v); if (!isNaN(n) && n >= 0) { S.coups = n; save(); render(); } }
@@ -264,13 +365,13 @@ function setCoupManual() {
 
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
-  S.passes.push({ d0: depth(), d1: depth()+10, c: S.coups, r: false, t: new Date().toISOString() });
+  S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, t:new Date().toISOString() });
   S.coups = 0; save(); render();
 }
 
 function marquerRefus() {
   if (!confirm('Marquer un REFUS à ' + depth() + ' cm ?')) return;
-  S.passes.push({ d0: depth(), d1: depth()+10, c: S.coups, r: true, t: new Date().toISOString() });
+  S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:true, t:new Date().toISOString() });
   S.coups = 0; save(); render();
 }
 
@@ -282,51 +383,101 @@ function nouveauSondage() {
   const next = pfx + (num+1);
   const nom = prompt('Numéro du nouveau sondage :', next);
   if (nom === null) return;
-  S.passes = []; S.coups = 0; S.cfg.sondage = nom || next;
+  S.passes = []; S.coups = 0; S.gps = null;
+  S.cfg.sondage = nom || next;
   save(); syncFields(); render();
 }
 
 function saveConfig() {
-  S.cfg.chantier  = document.getElementById('cfg-chantier').value.trim();
-  S.cfg.sondage   = document.getElementById('cfg-sondage').value.trim() || 'SP1';
-  S.cfg.operateur = document.getElementById('cfg-operateur').value.trim();
-  S.cfg.date      = document.getElementById('cfg-date').value;
-  S.cfg.profMax   = parseInt(document.getElementById('cfg-profmax').value) || 800;
-  S.cfg.refusSeuil= parseInt(document.getElementById('cfg-refus').value) || 50;
+  S.cfg.chantier   = document.getElementById('cfg-chantier').value.trim();
+  S.cfg.sondage    = document.getElementById('cfg-sondage').value.trim() || 'SP1';
+  S.cfg.operateur  = document.getElementById('cfg-operateur').value.trim();
+  S.cfg.date       = document.getElementById('cfg-date').value;
+  S.cfg.profMax    = parseInt(document.getElementById('cfg-profmax').value) || 800;
+  S.cfg.refusSeuil = parseInt(document.getElementById('cfg-refus').value) || 50;
   save(); render(); showTab('saisie');
 }
 
 function exportCSV() {
   if (!S.passes.length) { alert('Aucune donnée à exporter.'); return; }
+  const gpsLine = S.gps
+    ? '# GPS — Lat:'+S.gps.lat+' Lon:'+S.gps.lon+' Précision:±'+S.gps.acc+'m — '+S.gps.ts
+    : '# GPS — Non enregistrée';
   const lines = [
     '# PDL — '+(S.cfg.chantier||'Chantier')+' — '+S.cfg.sondage+' — '+S.cfg.date+' — '+(S.cfg.operateur||''),
+    gpsLine,
     'Prof_debut_cm,Prof_fin_cm,Nb_coups,Refus,Timestamp',
     ...S.passes.map(p => p.d0+','+p.d1+','+p.c+','+(p.r?'OUI':'NON')+','+p.t)
   ];
   const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url; a.download = S.cfg.sondage+'_'+S.cfg.date+'.csv';
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
+// ── SORT ───────────────────────────────────────────────────────────────
+function toggleSort() {
+  sortDesc = !sortDesc;
+  document.getElementById('sort-btn').textContent = sortDesc ? '↓ Profond → Surface' : '↑ Surface → Profond';
+  render();
+}
+
+// ── EDIT MODAL ─────────────────────────────────────────────────────────
+function openEditModal(idx) {
+  editIdx = idx;
+  const p = S.passes[idx];
+  document.getElementById('modal-title').textContent = 'Modifier la passe';
+  document.getElementById('modal-sub').textContent   = 'Profondeur : ' + p.d0 + ' – ' + p.d1 + ' cm';
+  document.getElementById('modal-input').value       = p.c;
+  document.getElementById('modal-refus').checked     = p.r;
+  document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+function closeModal(e) {
+  if (e.target.id === 'edit-modal') closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('edit-modal').classList.add('hidden');
+  editIdx = -1;
+}
+
+function saveRow() {
+  if (editIdx < 0) return;
+  const n = parseInt(document.getElementById('modal-input').value);
+  if (isNaN(n) || n < 0) { alert('Valeur invalide.'); return; }
+  S.passes[editIdx].c = n;
+  S.passes[editIdx].r = document.getElementById('modal-refus').checked;
+  save(); render(); closeModalDirect();
+}
+
+function deleteRow() {
+  if (editIdx < 0) return;
+  const p = S.passes[editIdx];
+  if (!confirm('Supprimer la passe ' + p.d0 + '–' + p.d1 + ' cm ?')) return;
+  S.passes.splice(editIdx, 1);
+  // Recalculate depths to keep consistency
+  S.passes = S.passes.map((p, i) => ({ ...p, d0: i*10, d1: i*10+10 }));
+  save(); render(); closeModalDirect();
+}
+
 // ── RENDER ─────────────────────────────────────────────────────────────
 function badge(c, r) {
-  if (r)                        return '<span class="badge b-stop">REFUS</span>';
-  if (c >= S.cfg.refusSeuil)   return '<span class="badge b-stop">'+c+'</span>';
-  if (c >= 25)                  return '<span class="badge b-warn">'+c+'</span>';
+  if (r)                       return '<span class="badge b-stop">REFUS</span>';
+  if (c >= S.cfg.refusSeuil)  return '<span class="badge b-stop">'+c+'</span>';
+  if (c >= 25)                 return '<span class="badge b-warn">'+c+'</span>';
   return '<span class="badge b-ok">'+c+'</span>';
 }
 
 function render() {
-  const d = depth(), ln = S.passes.length+1;
+  const d = depth(), ln = S.passes.length + 1;
   document.getElementById('topbar-title').textContent = (S.cfg.chantier ? S.cfg.chantier+' · ' : '') + S.cfg.sondage;
-  document.getElementById('depth-val').textContent = d;
-  document.getElementById('layer-label').textContent = 'Couche '+ln+' · '+d+'–'+(d+10)+' cm';
-  document.getElementById('coup-val').textContent = S.coups;
+  document.getElementById('depth-val').textContent    = d;
+  document.getElementById('layer-label').textContent  = 'Couche '+ln+' · '+d+'–'+(d+10)+' cm';
+  document.getElementById('coup-val').textContent     = S.coups;
 
-  // Recent
+  // Recent (always surface→profond, last 6)
   const recent = S.passes.slice(-6).reverse();
   const rt = document.getElementById('recent-table');
   if (!recent.length) { rt.innerHTML = '<div class="empty">Aucune passe enregistrée</div>'; }
@@ -334,32 +485,38 @@ function render() {
     let h = '<table><tr><th>Prof. (cm)</th><th>Coups</th></tr>';
     recent.forEach(p => { h += '<tr'+(p.r?' class="refus-row"':'')+'>'+
       '<td>'+p.d0+' – '+p.d1+'</td><td>'+badge(p.c,p.r)+'</td></tr>'; });
-    rt.innerHTML = h+'</table>';
+    rt.innerHTML = h + '</table>';
   }
 
-  // Full table
+  // Full table with sort
   const ft = document.getElementById('full-table');
   if (!S.passes.length) { ft.innerHTML = '<div class="empty">Aucune donnée</div>'; }
   else {
+    const ordered = sortDesc ? [...S.passes].reverse() : [...S.passes];
     let h = '<table><tr><th>Prof. (cm)</th><th>Coups</th><th>État</th></tr>';
-    S.passes.slice().reverse().forEach(p => { h += '<tr'+(p.r?' class="refus-row"':'')+'>'+
-      '<td>'+p.d0+'–'+p.d1+'</td><td>'+p.c+'</td><td>'+badge(p.c,p.r)+'</td></tr>'; });
-    ft.innerHTML = h+'</table>';
+    ordered.forEach(p => {
+      const realIdx = S.passes.indexOf(p);
+      h += '<tr class="data-row'+(p.r?' refus-row':'')+'" onclick="openEditModal('+realIdx+')">'+
+        '<td>'+p.d0+'–'+p.d1+'</td><td>'+p.c+'</td><td>'+badge(p.c,p.r)+'</td></tr>';
+    });
+    ft.innerHTML = h + '</table>';
   }
 
   // Stats
-  const total = S.passes.reduce((a,p)=>a+p.c, 0);
-  const refN  = S.passes.filter(p=>p.r).length;
+  const total = S.passes.reduce((a,p) => a+p.c, 0);
+  const refN  = S.passes.filter(p => p.r).length;
   const sc = document.getElementById('stats-card');
   const sr = document.getElementById('stats-row');
   if (S.passes.length) {
     sc.style.display = '';
     sr.innerHTML =
-      stat(S.passes.length, 'passes') +
-      stat(d+' cm', 'profondeur') +
-      stat(total, 'coups total') +
-      (refN ? stat(refN, 'refus') : '');
+      stat(S.passes.length,'passes') +
+      stat(d+' cm','profondeur') +
+      stat(total,'coups total') +
+      (refN ? stat(refN,'refus') : '');
   } else { sc.style.display = 'none'; }
+
+  renderGPS();
 }
 
 function stat(v,l) {
@@ -383,19 +540,16 @@ function showTab(t) {
     el.classList.toggle('active', ['saisie','donnees','config'][i]===t));
 }
 
-// ── INSTALL BANNER (iOS) ───────────────────────────────────────────────
+// ── INSTALL BANNER ─────────────────────────────────────────────────────
 function dismissBanner() {
   document.getElementById('install-banner').classList.add('hidden');
-  localStorage.setItem('pdl_banner_dismissed','1');
+  localStorage.setItem('pdl_banner','1');
 }
-
-function checkInstallBanner() {
+function checkBanner() {
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isStandalone = window.navigator.standalone;
-  const dismissed = localStorage.getItem('pdl_banner_dismissed');
-  if (isIOS && !isStandalone && !dismissed) {
+  const standalone = window.navigator.standalone;
+  if (isIOS && !standalone && !localStorage.getItem('pdl_banner'))
     document.getElementById('install-banner').classList.remove('hidden');
-  }
 }
 
 // ── SERVICE WORKER ─────────────────────────────────────────────────────
@@ -404,7 +558,7 @@ if ('serviceWorker' in navigator) {
 }
 
 load();
-checkInstallBanner();
+checkBanner();
 </script>
 </body>
 </html>
