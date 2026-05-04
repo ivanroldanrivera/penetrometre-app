@@ -40,7 +40,7 @@
     flex-wrap: wrap;
   }
   .toolbar-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'DM Sans', sans-serif;
     font-size: 18px;
     color: var(--ink);
     flex: 1;
@@ -104,7 +104,7 @@
     margin-bottom: 2mm;
   }
   .report-main-title {
-    font-family: 'DM Serif Display', serif;
+    font-family: 'DM Sans', sans-serif;
     font-size: 22px;
     color: var(--ink);
     line-height: 1.1;
@@ -513,10 +513,17 @@ function renderMap(gps) {
     if (_rmap) { _rmap.remove(); _rmap = null; }
     _rmap = L.map('report-map', { zoomControl:false, attributionControl:true }).setView([gps.lat, gps.lon], 17);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 19
-    }).addTo(_rmap);
+    L.tileLayer(
+      'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+      '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
+      '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+      {
+        attribution: '© IGN Géoportail',
+        maxZoom: 19,
+        maxNativeZoom: 19,
+        tileSize: 256
+      }
+    ).addTo(_rmap);
 
     const icon = L.divIcon({
       html: '<div style="width:12px;height:12px;background:#185FA5;border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>',
