@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="PDL">
 <meta name="theme-color" content="#185FA5">
 <link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <title>PDL — Pénétromètre Dynamique Léger</title>
 <style>
   :root {
@@ -22,8 +24,8 @@
     :root { --bg:#161412; --bg2:#1E1B18; --card:#252119; --border:#3A3530; --text:#F0EDE8; --text2:#8A847C; --red-bg:#2D1515; }
   }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-  html { height:100%; }
-  body { background:var(--bg); color:var(--text); font-family:-apple-system,'Helvetica Neue',sans-serif; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); min-height:100%; }
+  html,body { height:100%; }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,'Helvetica Neue',sans-serif; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
   .app { max-width:480px; margin:0 auto; padding:0 12px 90px; }
 
   .topbar { padding:14px 0 8px; }
@@ -39,18 +41,20 @@
   .card { background:var(--card); border:0.5px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
   .clabel { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text2); margin-bottom:10px; }
 
+  /* DEPTH + TIGES */
   .depth-tiges-row { display:flex; align-items:stretch; gap:10px; margin-bottom:6px; }
   .depth-block { flex:1; display:flex; flex-direction:column; justify-content:center; }
   .depth-num { font-size:52px; font-weight:200; color:var(--text); line-height:1; }
   .depth-unit { font-size:18px; color:var(--text2); }
-  .tiges-block { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 12px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:90px; cursor:pointer; transition:background 0.1s; }
+  .tiges-block { background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-width:94px; cursor:pointer; transition:background 0.1s; }
   .tiges-block:active { background:var(--border); }
   .tiges-val { font-size:28px; font-weight:200; color:var(--blue); line-height:1; }
   .tiges-unit { font-size:10px; color:var(--text2); letter-spacing:0.08em; text-transform:uppercase; margin-top:2px; }
-  .tiges-m { font-size:11px; color:var(--blue); margin-top:3px; font-weight:500; }
+  .tiges-m { font-size:12px; color:var(--blue); margin-top:3px; font-weight:500; }
   .tiges-hint { font-size:9px; color:var(--text2); margin-top:2px; }
   .layer-chip { font-size:11px; color:var(--text2); background:var(--bg2); border-radius:20px; padding:3px 10px; border:0.5px solid var(--border); display:inline-block; margin-bottom:16px; }
 
+  /* COUP */
   .coup-center { text-align:center; margin-bottom:18px; }
   .coup-num { font-size:88px; font-weight:200; color:var(--blue); line-height:1; letter-spacing:-3px; }
   .coup-sub { font-size:11px; color:var(--text2); margin-top:4px; letter-spacing:0.06em; }
@@ -69,10 +73,11 @@
   .btn-sm { padding:10px 8px; font-size:12px; background:var(--bg2); color:var(--text); border:0.5px solid var(--border); border-radius:var(--radius-sm); cursor:pointer; }
   .btn-sm:active { opacity:0.7; }
   .btn-valider { width:100%; padding:17px; font-size:15px; background:var(--green); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; margin-bottom:8px; letter-spacing:0.04em; }
-  .btn-valider:active { opacity:0.85; transform:scale(0.99); }
+  .btn-valider:active { opacity:0.85; }
   .btn-refus { width:100%; padding:13px; font-size:13px; background:var(--card); color:var(--red); border:0.5px solid #F09595; border-radius:var(--radius-sm); cursor:pointer; }
   .btn-refus:active { opacity:0.75; }
 
+  /* TABLE */
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th { text-align:left; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text2); padding:4px 6px; border-bottom:0.5px solid var(--border); font-weight:normal; }
   td { padding:8px 6px; border-bottom:0.5px solid var(--border); color:var(--text); }
@@ -86,12 +91,14 @@
   .b-stop { background:#FCEBEB; color:#A32D2D; }
   .edit-hint { font-size:10px; color:var(--text2); text-align:right; margin-bottom:6px; }
 
+  /* DONNÉES */
   .data-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
   .btn-blue { padding:13px; font-size:13px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; }
   .btn-blue:active { opacity:0.8; }
-  .btn-red  { padding:13px; font-size:13px; background:var(--card); color:var(--red); border:0.5px solid #F09595; border-radius:var(--radius-sm); cursor:pointer; }
+  .btn-red { padding:13px; font-size:13px; background:var(--card); color:var(--red); border:0.5px solid #F09595; border-radius:var(--radius-sm); cursor:pointer; }
   .btn-red:active { opacity:0.75; }
 
+  /* GPS */
   .gps-card { background:var(--card); border:0.5px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:8px; }
   .gps-row { display:flex; align-items:center; gap:10px; }
   .gps-info { flex:1; }
@@ -101,50 +108,80 @@
   .btn-gps:active { opacity:0.8; }
   .gps-dot { width:8px; height:8px; border-radius:50%; background:#ccc; flex-shrink:0; }
   .gps-dot.ok { background:#3B6D11; }
-  .gps-dot.loading { background:var(--orange); animation:pulse 1s infinite; }
+  .gps-dot.loading { background:var(--orange); animation:blink 1s infinite; }
   .gps-dot.error { background:var(--red); }
-  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
 
+  /* SORT */
   .sort-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .sort-btn { font-size:11px; color:var(--blue); background:none; border:0.5px solid var(--blue); border-radius:20px; padding:3px 10px; cursor:pointer; }
 
+  /* STATS */
   .stats-row { display:flex; justify-content:space-around; padding:8px 0; flex-wrap:wrap; gap:6px; }
   .stat-col { text-align:center; }
   .stat-val { font-size:18px; font-weight:200; }
   .stat-lbl { font-size:10px; color:var(--text2); letter-spacing:0.06em; text-transform:uppercase; }
 
+  /* CHART */
   .chart-wrap { width:100%; overflow-x:auto; }
 
+  /* CONFIG */
   .irow { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .irow label { font-size:12px; color:var(--text2); min-width:115px; }
   .irow input { flex:1; padding:9px 10px; font-size:13px; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); }
   .btn-save { width:100%; padding:13px; font-size:14px; background:var(--blue); color:#fff; border:none; border-radius:var(--radius-sm); cursor:pointer; margin-top:8px; }
   .btn-save:active { opacity:0.8; }
 
+  /* MODALS */
   .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:100; display:flex; align-items:flex-end; justify-content:center; padding-bottom:env(safe-area-inset-bottom); }
-  .modal { background:var(--card); border-radius:var(--radius) var(--radius) 0 0; padding:24px 20px 20px; width:100%; max-width:480px; }
-  .modal-title { font-size:16px; margin-bottom:4px; }
-  .modal-sub { font-size:12px; color:var(--text2); margin-bottom:16px; }
-  .modal-input { width:100%; padding:12px; font-size:24px; text-align:center; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); margin-bottom:12px; }
-  .modal-check { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:16px; }
-  .modal-check input { width:18px; height:18px; }
-  .modal-btns { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
-  .modal-btn { padding:12px; font-size:13px; border:none; border-radius:var(--radius-sm); cursor:pointer; }
-  .modal-cancel { background:var(--bg2); color:var(--text); }
-  .modal-delete { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
-  .modal-ok { background:var(--blue); color:#fff; }
-  .modal-btn:active { opacity:0.75; }
+  .modal { background:var(--card); border-radius:var(--radius) var(--radius) 0 0; padding:22px 18px 18px; width:100%; max-width:480px; max-height:90vh; overflow-y:auto; }
+  .modal-title { font-size:16px; margin-bottom:3px; }
+  .modal-sub { font-size:12px; color:var(--text2); margin-bottom:14px; }
+  .modal-sep { height:0.5px; background:var(--border); margin:14px 0; }
+  .modal-section-label { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text2); margin-bottom:8px; }
 
-  .tiges-modal-btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
-  .tbtn { padding:18px 8px; font-size:16px; border:none; border-radius:var(--radius-sm); cursor:pointer; line-height:1.4; }
-  .tbtn-add { background:var(--blue); color:#fff; }
-  .tbtn-rem { background:var(--orange-bg); color:var(--orange); border:0.5px solid #FAC775; }
-  .tbtn:active { opacity:0.8; }
-  .tiges-cur { text-align:center; font-size:32px; font-weight:200; color:var(--blue); margin-bottom:4px; }
-  .tiges-cur-sub { text-align:center; font-size:12px; color:var(--text2); margin-bottom:16px; }
+  /* Coups input */
+  .modal-input { width:100%; padding:12px; font-size:28px; text-align:center; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); margin-bottom:10px; }
+  .modal-check { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer; margin-bottom:4px; }
+  .modal-check input { width:18px; height:18px; }
+
+  /* Tiges 4-button grid */
+  .tiges-4grid { display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:6px; margin-bottom:6px; }
+  .tbtn { padding:12px 4px; font-size:13px; font-weight:500; border:none; border-radius:var(--radius-sm); cursor:pointer; text-align:center; line-height:1.3; }
+  .tbtn-sub { font-size:9px; opacity:0.7; font-weight:normal; display:block; margin-top:2px; }
+  .tbtn-m1 { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
+  .tbtn-mh { background:var(--orange-bg); color:var(--orange); border:0.5px solid #FAC775; }
+  .tbtn-ph { background:#EAF3DE; color:#3B6D11; border:0.5px solid #9DC96A; }
+  .tbtn-p1 { background:var(--blue); color:#fff; }
+  .tbtn:active { opacity:0.75; transform:scale(0.96); }
+  .tiges-current { text-align:center; font-size:13px; color:var(--text2); margin-bottom:8px; }
+  .tiges-current strong { color:var(--blue); font-size:18px; font-weight:300; }
+  .tiges-propagate-note { font-size:11px; color:var(--orange); background:var(--orange-bg); border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+
+  /* Modal bottom buttons */
+  .modal-btns-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:14px; }
+  .modal-btns-2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+  .mbtn { padding:12px; font-size:13px; border:none; border-radius:var(--radius-sm); cursor:pointer; }
+  .mbtn:active { opacity:0.75; }
+  .mbtn-cancel { background:var(--bg2); color:var(--text); }
+  .mbtn-delete { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
+  .mbtn-ok { background:var(--blue); color:#fff; }
+
+  /* Tiges-only modal */
+  .tiges-big-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+  .tbtn-big { padding:20px 8px; font-size:18px; font-weight:300; border:none; border-radius:var(--radius-sm); cursor:pointer; text-align:center; line-height:1.3; }
+  .tbtn-big-sub { font-size:11px; opacity:0.7; font-weight:normal; display:block; margin-top:4px; }
+  .tbtn-big:active { opacity:0.8; transform:scale(0.97); }
+  .tbtn-big-m { background:var(--red-bg); color:var(--red); border:0.5px solid #F09595; }
+  .tbtn-big-p { background:var(--blue); color:#fff; }
+  .tiges-display { text-align:center; padding:12px 0 4px; }
+  .tiges-display-val { font-size:48px; font-weight:200; color:var(--blue); line-height:1; }
+  .tiges-display-m { font-size:14px; color:var(--text2); margin-top:4px; }
 
   .empty { text-align:center; padding:24px; color:var(--text2); font-size:13px; }
   .hidden { display:none; }
+  #map { height:260px; width:100%; background:#ECEAE5; border-radius:9px; margin-top:12px; overflow:hidden; }
+  #map-placeholder { height:100px; display:flex; align-items:center; justify-content:center; color:#6B6560; font-size:13px; background:#ECEAE5; border-radius:9px; margin-top:12px; border:0.5px solid #D6D2CA; }
 </style>
 </head>
 <body>
@@ -207,9 +244,10 @@
     <div class="card">
       <div class="sort-row">
         <div class="clabel" style="margin-bottom:0">Passes enregistrées</div>
+        <button class="sort-btn" id="sort-btn-s" onclick="toggleSort()">↑ Surface → Profond</button>
       </div>
       <div class="edit-hint">Toucher une ligne pour modifier</div>
-      <div id="recent-table-saisie"><div class="empty">Aucune passe enregistrée</div></div>
+      <div id="table-saisie"><div class="empty">Aucune passe enregistrée</div></div>
     </div>
   </div>
 
@@ -225,24 +263,26 @@
         </div>
         <button class="btn-gps" onclick="captureGPS()">📍 Capturer</button>
       </div>
+      <div id="map-placeholder" style="height:100px;display:flex;align-items:center;justify-content:center;color:#6B6560;font-size:13px;background:#ECEAE5;border-radius:9px;margin-top:12px;border:0.5px solid #D6D2CA;">📍 Capturez une position GPS pour afficher la carte</div>
+      <div id="map" style="display:none;height:260px;width:100%;border-radius:9px;margin-top:12px;overflow:hidden;"></div>
     </div>
-
     <div class="data-btns">
       <button class="btn-blue" onclick="exportCSV()">⬇ Exporter CSV</button>
       <button class="btn-red"  onclick="nouveauSondage()">🗑 Nouveau sondage</button>
     </div>
-
+    <div style="margin-bottom:8px;">
+      <button class="btn-blue" style="width:100%;background:var(--green);" onclick="window.open('rapport.html','_blank')">📄 Rapport PDF</button>
+    </div>
     <div class="card" id="stats-card" style="display:none">
       <div class="stats-row" id="stats-row"></div>
     </div>
-
     <div class="card">
       <div class="sort-row">
         <div class="clabel" style="margin-bottom:0">Relevé complet</div>
-        <button class="sort-btn" id="sort-btn" onclick="toggleSort()">↑ Surface → Profond</button>
+        <button class="sort-btn" id="sort-btn-d" onclick="toggleSort()">↑ Surface → Profond</button>
       </div>
       <div class="edit-hint">Toucher un enregistrement pour modifier</div>
-      <div id="full-table"><div class="empty">Aucune donnée</div></div>
+      <div id="table-donnees"><div class="empty">Aucune donnée</div></div>
     </div>
   </div>
 
@@ -250,9 +290,7 @@
   <div id="tab-graphique" class="hidden">
     <div class="card">
       <div class="clabel">Résistance de pointe qd [MPa]</div>
-      <div class="chart-wrap" id="chart-wrap">
-        <div class="empty">Aucune donnée</div>
-      </div>
+      <div class="chart-wrap" id="chart-wrap"><div class="empty">Aucune donnée</div></div>
     </div>
     <div class="card">
       <div class="clabel">Paramètres utilisés</div>
@@ -264,20 +302,20 @@
   <div id="tab-config" class="hidden">
     <div class="card">
       <div class="clabel">Sondage</div>
-      <div class="irow"><label>Chantier</label>      <input type="text"   id="cfg-chantier"  placeholder="Nom du chantier" autocomplete="off"/></div>
-      <div class="irow"><label>Sondage n°</label>    <input type="text"   id="cfg-sondage"   placeholder="SP1" autocomplete="off"/></div>
-      <div class="irow"><label>Opérateur</label>     <input type="text"   id="cfg-operateur" placeholder="Nom" autocomplete="off"/></div>
-      <div class="irow"><label>Date</label>           <input type="date"   id="cfg-date"/></div>
+      <div class="irow"><label>Chantier</label>     <input type="text" id="cfg-chantier" placeholder="Nom du chantier" autocomplete="off"/></div>
+      <div class="irow"><label>Sondage n°</label>   <input type="text" id="cfg-sondage"  placeholder="SP1" autocomplete="off"/></div>
+      <div class="irow"><label>Opérateur</label>    <input type="text" id="cfg-operateur" placeholder="Nom" autocomplete="off"/></div>
+      <div class="irow"><label>Date</label>          <input type="date" id="cfg-date"/></div>
     </div>
     <div class="card">
       <div class="clabel">Paramètres Pénétromètre</div>
-      <div class="irow"><label>Masse tombante M (kg)</label>     <input type="number" id="cfg-M"  value="10"   step="0.01"/></div>
-      <div class="irow"><label>Hauteur chute h (m)</label>       <input type="number" id="cfg-h"  value="0.54" step="0.01"/></div>
-      <div class="irow"><label>Masse guide+enclume (kg)</label>  <input type="number" id="cfg-Mg" value="5.21" step="0.01"/></div>
-      <div class="irow"><label>Masse tige (kg)</label>           <input type="number" id="cfg-Mt" value="0.59" step="0.01"/></div>
-      <div class="irow"><label>Masse pointe (kg)</label>         <input type="number" id="cfg-Mp" value="0.06" step="0.01"/></div>
-      <div class="irow"><label>Section pointe (cm²)</label>      <input type="number" id="cfg-A"  value="4"    step="0.1"/></div>
-      <div class="irow"><label>Longueur tige (m)</label>         <input type="number" id="cfg-Lt" value="1"    step="0.5"/></div>
+      <div class="irow"><label>Masse tombante M (kg)</label>    <input type="number" id="cfg-M"  value="10"   step="0.01"/></div>
+      <div class="irow"><label>Hauteur chute h (m)</label>      <input type="number" id="cfg-h"  value="0.54" step="0.01"/></div>
+      <div class="irow"><label>Masse guide+enclume (kg)</label> <input type="number" id="cfg-Mg" value="5.21" step="0.01"/></div>
+      <div class="irow"><label>Masse tige (kg)</label>          <input type="number" id="cfg-Mt" value="0.59" step="0.01"/></div>
+      <div class="irow"><label>Masse pointe (kg)</label>        <input type="number" id="cfg-Mp" value="0.06" step="0.01"/></div>
+      <div class="irow"><label>Section pointe (cm²)</label>     <input type="number" id="cfg-A"  value="4"    step="0.1"/></div>
+      <div class="irow"><label>Longueur tige (m)</label>        <input type="number" id="cfg-Lt" value="1"    step="0.5"/></div>
       <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
     <div class="card">
@@ -290,37 +328,55 @@
 </div>
 
 <!-- ══ MODAL ÉDITION PASSE ══ -->
-<div class="modal-overlay hidden" id="edit-modal" onclick="closeModal(event)">
+<div class="modal-overlay hidden" id="edit-modal" onclick="closeEditModal(event)">
   <div class="modal">
     <div class="modal-title">Modifier la passe</div>
-    <div class="modal-sub" id="modal-sub"></div>
-    <input class="modal-input" type="number" id="modal-input" min="0" max="999"/>
+    <div class="modal-sub" id="edit-modal-sub"></div>
+
+    <!-- Coups -->
+    <div class="modal-section-label">Nombre de coups</div>
+    <input class="modal-input" type="number" id="modal-coups" min="0" max="999"/>
     <label class="modal-check"><input type="checkbox" id="modal-refus"/> Marquer comme REFUS</label>
-    <div class="modal-btns">
-      <button class="modal-btn modal-cancel" onclick="closeModalDirect()">Annuler</button>
-      <button class="modal-btn modal-delete" onclick="deleteRow()">🗑 Supprimer</button>
-      <button class="modal-btn modal-ok"     onclick="saveRow()">✓ OK</button>
+
+    <div class="modal-sep"></div>
+
+    <!-- Tiges -->
+    <div class="modal-section-label">Modifier les tiges (à partir de cette passe)</div>
+    <div class="tiges-propagate-note" id="tiges-prop-note"></div>
+    <div class="tiges-current" id="tiges-current-display"></div>
+    <div class="tiges-4grid">
+      <button class="tbtn tbtn-m1" onclick="adjustEditTiges(-1)">−1<span class="tbtn-sub">tige</span></button>
+      <button class="tbtn tbtn-mh" onclick="adjustEditTiges(-0.5)">−½<span class="tbtn-sub">0.5 m</span></button>
+      <button class="tbtn tbtn-ph" onclick="adjustEditTiges(0.5)">+½<span class="tbtn-sub">0.5 m</span></button>
+      <button class="tbtn tbtn-p1" onclick="adjustEditTiges(1)">+1<span class="tbtn-sub">tige</span></button>
+    </div>
+
+    <div class="modal-btns-3">
+      <button class="mbtn mbtn-cancel" onclick="closeEditModalDirect()">Annuler</button>
+      <button class="mbtn mbtn-delete" onclick="deleteRow()">🗑 Supprimer</button>
+      <button class="mbtn mbtn-ok"     onclick="saveRow()">✓ OK</button>
     </div>
   </div>
 </div>
 
-<!-- ══ MODAL TIGES ══ -->
+<!-- ══ MODAL TIGES (depuis saisie) ══ -->
 <div class="modal-overlay hidden" id="tiges-modal" onclick="closeTigesModal(event)">
   <div class="modal">
     <div class="modal-title">Tiges ajoutées</div>
-    <div class="tiges-cur" id="tiges-cur-val">0</div>
-    <div class="tiges-cur-sub" id="tiges-cur-m">0.00 m</div>
-    <div class="tiges-modal-btns">
-      <button class="tbtn tbtn-rem" onclick="adjustTiges(-1)">− 1 tige<br><span style="font-size:11px;opacity:0.7;">−1.0 m</span></button>
-      <button class="tbtn tbtn-add" onclick="adjustTiges(1)">+ 1 tige<br><span style="font-size:11px;opacity:0.7;">+1.0 m</span></button>
+    <div class="modal-sub">Modifie la valeur courante (passiées futures)</div>
+    <div class="tiges-display">
+      <div class="tiges-display-val" id="tiges-modal-val">0</div>
+      <div class="tiges-display-m"  id="tiges-modal-m">0.00 m</div>
     </div>
-    <div style="margin-bottom:14px;">
-      <div class="clabel">Ou saisir manuellement (nbre de tiges)</div>
-      <input class="modal-input" type="number" id="tiges-input" min="0" step="1" style="margin-bottom:0"/>
+    <div class="tiges-big-grid">
+      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-1)">−1 tige<span class="tbtn-big-sub">−1.0 m</span></button>
+      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(1)">+1 tige<span class="tbtn-big-sub">+1.0 m</span></button>
+      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-0.5)">−½ tige<span class="tbtn-big-sub">−0.5 m</span></button>
+      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(0.5)">+½ tige<span class="tbtn-big-sub">+0.5 m</span></button>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-      <button class="modal-btn modal-cancel" onclick="closeTigesModalDirect()">Annuler</button>
-      <button class="modal-btn modal-ok"     onclick="saveTiges()">✓ OK</button>
+    <div class="modal-btns-2">
+      <button class="mbtn mbtn-cancel" onclick="closeTigesModalDirect()">Annuler</button>
+      <button class="mbtn mbtn-ok"     onclick="saveTigesModal()">✓ OK</button>
     </div>
   </div>
 </div>
@@ -335,74 +391,45 @@ let S = {
     M:10, h:0.54, Mg:5.21, Mt:0.59, Mp:0.06, A:4, Lt:1
   }
 };
-let sortDesc = false;
-let editIdx  = -1;
-let tigesTemp = 0;
+let sortDesc   = false;
+let editIdx    = -1;
+let editTigesTemp = 0;
+let tigesModalTemp = 0;
 
 function today() { return new Date().toISOString().slice(0,10); }
 
 function load() {
-  try { const s = localStorage.getItem('pdl_v4'); if (s) S = JSON.parse(s); } catch(e) {}
-  if (!S.gps)   S.gps   = null;
-  if (!S.tiges) S.tiges = 0;
+  try { const s = localStorage.getItem('pdl_v5'); if (s) S = JSON.parse(s); } catch(e) {}
+  if (!S.gps)    S.gps    = null;
+  if (!S.tiges)  S.tiges  = 0;
   if (!S.cfg.Lt) S.cfg.Lt = 1;
   syncFields(); render();
 }
 
 function save() {
   try {
-    localStorage.setItem('pdl_v4', JSON.stringify(S));
+    localStorage.setItem('pdl_v5', JSON.stringify(S));
     document.getElementById('save-status').textContent =
       'Sauvegardé ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   } catch(e) { document.getElementById('save-status').textContent = '⚠ Erreur'; }
 }
 
-// ══ TIGES ══════════════════════════════════════════════════════════════
+// ══ HELPERS ═══════════════════════════════════════════════════════════
 function tigesM(n) { return (n * (S.cfg.Lt || 1)).toFixed(2); }
+function depth()   { return S.passes.length * 10; }
 
-function openTigesModal() {
-  tigesTemp = S.tiges;
-  document.getElementById('tiges-input').value = tigesTemp;
-  updateTigesModalDisplay();
-  document.getElementById('tiges-modal').classList.remove('hidden');
-}
-
-function adjustTiges(delta) {
-  tigesTemp = Math.max(0, tigesTemp + delta);
-  document.getElementById('tiges-input').value = tigesTemp;
-  updateTigesModalDisplay();
-}
-
-function updateTigesModalDisplay() {
-  document.getElementById('tiges-cur-val').textContent = tigesTemp;
-  document.getElementById('tiges-cur-m').textContent   = tigesM(tigesTemp) + ' m';
-}
-
-function saveTiges() {
-  const v = parseFloat(document.getElementById('tiges-input').value);
-  if (!isNaN(v) && v >= 0) { S.tiges = Math.round(v); save(); render(); }
-  closeTigesModalDirect();
-}
-
-function closeTigesModal(e) { if (e.target.id==='tiges-modal') closeTigesModalDirect(); }
-function closeTigesModalDirect() { document.getElementById('tiges-modal').classList.add('hidden'); }
-
-// ══ qd FORMULA ══════════════════════════════════════════════════════════
-// qd [MPa] = (M·g·h) / (A_m²·e_m/N) · M/(M+Mg+Mp+n·Mt) / 1e6
+// ══ qd FORMULA ════════════════════════════════════════════════════════
 function calcQd(N, n) {
   if (!N || N <= 0) return null;
   const { M, h, Mg, Mt, Mp, A } = S.cfg;
-  const A_m2 = A / 10000;
-  const e_m  = 0.10;
+  const A_m2 = A / 10000, e_m = 0.10;
   try {
     const qd = (M * 9.81 * h) / (A_m2 * e_m / N) * (M / (M + Mg + Mp + n * Mt)) / 1e6;
     return isFinite(qd) && qd > 0 ? qd : null;
   } catch(e) { return null; }
 }
 
-// ══ SAISIE ACTIONS ══════════════════════════════════════════════════════
-function depth() { return S.passes.length * 10; }
-
+// ══ COUP ACTIONS ══════════════════════════════════════════════════════
 function addCoup(d) {
   if (depth() >= S.cfg.profMax) return;
   S.coups = Math.max(0, S.coups + d);
@@ -410,18 +437,16 @@ function addCoup(d) {
 }
 function resetCoup() { S.coups = 0; save(); render(); }
 function setCoupManual() {
-  const v = prompt('Nombre de coups pour cette passe :', S.coups);
+  const v = prompt('Nombre de coups :', S.coups);
   if (v !== null) { const n = parseInt(v); if (!isNaN(n) && n >= 0) { S.coups = n; save(); render(); } }
 }
 
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() });
-  // Auto tige: every 10 passes = 1 metre, suggest adding 1 tige
-  if (S.passes.length % 10 === 0 && S.passes.length > 0) {
-    if (confirm('Profondeur atteinte : ' + (S.passes.length/10) + ' m\nAjouter 1 tige automatiquement ?')) {
-      S.tiges += 1;
-    }
+  // Auto-suggest tige every metre
+  if (S.passes.length % 10 === 0) {
+    if (confirm('Profondeur : ' + (S.passes.length/10) + ' m\nAjouter 1 tige ?')) S.tiges += 1;
   }
   S.coups = 0; save(); render();
 }
@@ -432,57 +457,128 @@ function marquerRefus() {
   S.coups = 0; save(); render();
 }
 
-function nouveauSondage() {
-  if (!confirm('Démarrer un nouveau sondage ?\nExportez le CSV si nécessaire.')) return;
-  const cur = S.cfg.sondage || 'SP1';
-  const num = parseInt(cur.replace(/\D/g,'') || '1');
-  const pfx = cur.replace(/\d+/g,'');
-  const nom = prompt('Numéro du nouveau sondage :', pfx+(num+1));
-  if (nom === null) return;
-  S.passes = []; S.coups = 0; S.tiges = 0; S.gps = null;
-  S.cfg.sondage = nom || pfx+(num+1);
-  save(); syncFields(); render();
+// ══ TIGES MODAL (depuis bloc tiges en saisie) ══════════════════════════
+function openTigesModal() {
+  tigesModalTemp = S.tiges;
+  updateTigesModalUI();
+  document.getElementById('tiges-modal').classList.remove('hidden');
+}
+function adjustTigesModal(delta) {
+  tigesModalTemp = Math.max(0, tigesModalTemp + delta);
+  updateTigesModalUI();
+}
+function updateTigesModalUI() {
+  document.getElementById('tiges-modal-val').textContent = tigesModalTemp;
+  document.getElementById('tiges-modal-m').textContent   = tigesM(tigesModalTemp) + ' m';
+}
+function saveTigesModal() {
+  S.tiges = tigesModalTemp; save(); render(); closeTigesModalDirect();
+}
+function closeTigesModal(e) { if (e.target.id === 'tiges-modal') closeTigesModalDirect(); }
+function closeTigesModalDirect() { document.getElementById('tiges-modal').classList.add('hidden'); }
+
+// ══ EDIT MODAL ════════════════════════════════════════════════════════
+function openEditModal(idx) {
+  editIdx = idx;
+  const p = S.passes[idx];
+  const qd = calcQd(p.c, p.n);
+  editTigesTemp = p.n;
+
+  document.getElementById('edit-modal-sub').textContent =
+    'Profondeur : ' + p.d0 + '–' + p.d1 + ' cm' + (qd ? '  ·  qd = ' + qd.toFixed(3) + ' MPa' : '');
+  document.getElementById('modal-coups').value  = p.c;
+  document.getElementById('modal-refus').checked = p.r;
+
+  // How many passes will be affected
+  const affected = S.passes.length - idx;
+  document.getElementById('tiges-prop-note').textContent =
+    'Modifier ici propagera le changement sur ' + affected + ' passe(s) (cette passe + les suivantes)';
+
+  updateEditTigesUI();
+  document.getElementById('edit-modal').classList.remove('hidden');
 }
 
-function saveConfig() {
-  S.cfg.chantier   = document.getElementById('cfg-chantier').value.trim();
-  S.cfg.sondage    = document.getElementById('cfg-sondage').value.trim() || 'SP1';
-  S.cfg.operateur  = document.getElementById('cfg-operateur').value.trim();
-  S.cfg.date       = document.getElementById('cfg-date').value;
-  S.cfg.profMax    = parseInt(document.getElementById('cfg-profmax').value) || 800;
-  S.cfg.refusSeuil = parseInt(document.getElementById('cfg-refus').value) || 50;
-  S.cfg.M  = parseFloat(document.getElementById('cfg-M').value)  || 10;
-  S.cfg.h  = parseFloat(document.getElementById('cfg-h').value)  || 0.54;
-  S.cfg.Mg = parseFloat(document.getElementById('cfg-Mg').value) || 5.21;
-  S.cfg.Mt = parseFloat(document.getElementById('cfg-Mt').value) || 0.59;
-  S.cfg.Mp = parseFloat(document.getElementById('cfg-Mp').value) || 0.06;
-  S.cfg.A  = parseFloat(document.getElementById('cfg-A').value)  || 4;
-  S.cfg.Lt = parseFloat(document.getElementById('cfg-Lt').value) || 1;
-  save(); render(); showTab('saisie');
+function adjustEditTiges(delta) {
+  editTigesTemp = Math.max(0, editTigesTemp + delta);
+  updateEditTigesUI();
 }
 
-// ══ GPS ════════════════════════════════════════════════════════════════
+function updateEditTigesUI() {
+  document.getElementById('tiges-current-display').innerHTML =
+    'Tiges : <strong>' + editTigesTemp + '</strong> = ' + tigesM(editTigesTemp) + ' m';
+}
+
+function saveRow() {
+  if (editIdx < 0) return;
+  const n = parseInt(document.getElementById('modal-coups').value);
+  if (isNaN(n) || n < 0) { alert('Valeur invalide.'); return; }
+
+  // Update coups + refus for this pass
+  S.passes[editIdx].c = n;
+  S.passes[editIdx].r = document.getElementById('modal-refus').checked;
+
+  // Propagate tiges change from editIdx onwards
+  const oldTiges = S.passes[editIdx].n;
+  if (editTigesTemp !== oldTiges) {
+    const delta = editTigesTemp - oldTiges;
+    for (let i = editIdx; i < S.passes.length; i++) {
+      S.passes[i].n = Math.max(0, S.passes[i].n + delta);
+    }
+    // Also update current tiges counter if we're at the end
+    if (editIdx === S.passes.length - 1 || S.passes.length === 0) {
+      S.tiges = editTigesTemp;
+    } else {
+      // Update current tiges to match the last pass + delta
+      S.tiges = Math.max(0, S.tiges + delta);
+    }
+  }
+
+  save(); render(); closeEditModalDirect();
+}
+
+function deleteRow() {
+  if (editIdx < 0) return;
+  const p = S.passes[editIdx];
+  if (!confirm('Supprimer la passe ' + p.d0 + '–' + p.d1 + ' cm ?')) return;
+  S.passes.splice(editIdx, 1);
+  S.passes = S.passes.map((p, i) => ({ ...p, d0:i*10, d1:i*10+10 }));
+  save(); render(); closeEditModalDirect();
+}
+
+function closeEditModal(e) { if (e.target.id === 'edit-modal') closeEditModalDirect(); }
+function closeEditModalDirect() { document.getElementById('edit-modal').classList.add('hidden'); editIdx = -1; }
+
+// ══ SORT ══════════════════════════════════════════════════════════════
+function toggleSort() {
+  sortDesc = !sortDesc;
+  const lbl = sortDesc ? '↓ Profond → Surface' : '↑ Surface → Profond';
+  document.getElementById('sort-btn-s').textContent = lbl;
+  document.getElementById('sort-btn-d').textContent = lbl;
+  render();
+}
+
+// ══ GPS ═══════════════════════════════════════════════════════════════
 function captureGPS() {
-  const dot=document.getElementById('gps-dot'), coords=document.getElementById('gps-coords'), meta=document.getElementById('gps-meta');
-  if (!navigator.geolocation) { coords.textContent='GPS non disponible'; dot.className='gps-dot error'; return; }
-  dot.className='gps-dot loading'; coords.textContent='Acquisition…'; meta.textContent='';
+  const dot=document.getElementById('gps-dot'), co=document.getElementById('gps-coords'), me=document.getElementById('gps-meta');
+  if (!navigator.geolocation) { co.textContent='GPS non disponible'; dot.className='gps-dot error'; return; }
+  dot.className='gps-dot loading'; co.textContent='Acquisition…'; me.textContent='';
   navigator.geolocation.getCurrentPosition(
     pos => {
-      S.gps = { lat:parseFloat(pos.coords.latitude.toFixed(6)), lon:parseFloat(pos.coords.longitude.toFixed(6)), acc:Math.round(pos.coords.accuracy), ts:new Date().toISOString() };
-      save(); renderGPS();
+      S.gps={lat:parseFloat(pos.coords.latitude.toFixed(6)),lon:parseFloat(pos.coords.longitude.toFixed(6)),acc:Math.round(pos.coords.accuracy),ts:new Date().toISOString()};
+      save(); renderGPS(); if(typeof L!=='undefined') initMap(S.gps.lat, S.gps.lon);
     },
-    err => { dot.className='gps-dot error'; coords.textContent='Erreur GPS'; meta.textContent=err.code===1?'Autorisation refusée':'Signal indisponible'; },
-    { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+    err => { dot.className='gps-dot error'; co.textContent='Erreur GPS'; me.textContent=err.code===1?'Autorisation refusée':'Signal indisponible'; },
+    {enableHighAccuracy:true,timeout:15000,maximumAge:0}
   );
 }
-
 function renderGPS() {
-  const dot=document.getElementById('gps-dot'), coords=document.getElementById('gps-coords'), meta=document.getElementById('gps-meta');
+  const dot=document.getElementById('gps-dot'), co=document.getElementById('gps-coords'), me=document.getElementById('gps-meta');
   if (S.gps) {
     dot.className='gps-dot ok';
-    coords.textContent=S.gps.lat.toFixed(6)+', '+S.gps.lon.toFixed(6);
-    meta.textContent='± '+S.gps.acc+' m · '+new Date(S.gps.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
-  } else { dot.className='gps-dot'; coords.textContent='—'; meta.textContent='Non enregistrée'; }
+    co.textContent=S.gps.lat.toFixed(6)+', '+S.gps.lon.toFixed(6);
+    me.textContent='± '+S.gps.acc+' m · '+new Date(S.gps.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    if(typeof L!=='undefined') initMap(S.gps.lat, S.gps.lon);
+  } else { dot.className='gps-dot'; co.textContent='—'; me.textContent='Non enregistrée'; resetMap && resetMap(); }
 }
 
 // ══ EXPORT ════════════════════════════════════════════════════════════
@@ -491,10 +587,10 @@ function exportCSV() {
   const c = S.cfg;
   const lines = [
     '# PDL — '+(c.chantier||'Chantier')+' — '+c.sondage+' — '+c.date+' — '+(c.operateur||''),
-    S.gps ? '# GPS — Lat:'+S.gps.lat+' Lon:'+S.gps.lon+' ±'+S.gps.acc+'m' : '# GPS — Non enregistrée',
-    '# Paramètres: M='+c.M+'kg h='+c.h+'m Mg='+c.Mg+'kg Mt='+c.Mt+'kg Mp='+c.Mp+'kg A='+c.A+'cm²',
+    S.gps?'# GPS — Lat:'+S.gps.lat+' Lon:'+S.gps.lon+' ±'+S.gps.acc+'m':'# GPS — Non enregistrée',
+    '# Params: M='+c.M+'kg h='+c.h+'m Mg='+c.Mg+' Mt='+c.Mt+' Mp='+c.Mp+' A='+c.A+'cm²',
     'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Refus,Timestamp',
-    ...S.passes.map(p => { const qd=calcQd(p.c,p.n); return p.d0+','+p.d1+','+p.c+','+p.n+','+(qd!==null?qd.toFixed(3):'NA')+','+(p.r?'OUI':'NON')+','+p.t; })
+    ...S.passes.map(p=>{const qd=calcQd(p.c,p.n);return p.d0+','+p.d1+','+p.c+','+p.n+','+(qd!==null?qd.toFixed(3):'NA')+','+(p.r?'OUI':'NON')+','+p.t;})
   ];
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
@@ -503,140 +599,73 @@ function exportCSV() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
 }
 
-// ══ SORT ══════════════════════════════════════════════════════════════
-function toggleSort() {
-  sortDesc=!sortDesc;
-  document.getElementById('sort-btn').textContent=sortDesc?'↓ Profond → Surface':'↑ Surface → Profond';
-  render();
+// ══ CONFIG ════════════════════════════════════════════════════════════
+function nouveauSondage() {
+  if (!confirm('Démarrer un nouveau sondage ?\nExportez le CSV si nécessaire.')) return;
+  const cur=S.cfg.sondage||'SP1', num=parseInt(cur.replace(/\D/g,'')||'1'), pfx=cur.replace(/\d+/g,'');
+  const nom=prompt('Numéro du nouveau sondage :', pfx+(num+1));
+  if (nom===null) return;
+  S.passes=[]; S.coups=0; S.tiges=0; S.gps=null; S.cfg.sondage=nom||pfx+(num+1); if(typeof resetMap!=='undefined') resetMap();
+  save(); syncFields(); render();
 }
 
-// ══ EDIT MODAL ════════════════════════════════════════════════════════
-function openEditModal(idx) {
-  editIdx=idx;
-  const p=S.passes[idx], qd=calcQd(p.c,p.n);
-  document.getElementById('modal-sub').textContent='Profondeur : '+p.d0+'–'+p.d1+' cm'+(qd?' · qd = '+qd.toFixed(3)+' MPa':'');
-  document.getElementById('modal-input').value=p.c;
-  document.getElementById('modal-refus').checked=p.r;
-  document.getElementById('edit-modal').classList.remove('hidden');
-}
-function closeModal(e) { if(e.target.id==='edit-modal') closeModalDirect(); }
-function closeModalDirect() { document.getElementById('edit-modal').classList.add('hidden'); editIdx=-1; }
-function saveRow() {
-  if(editIdx<0) return;
-  const n=parseInt(document.getElementById('modal-input').value);
-  if(isNaN(n)||n<0){alert('Valeur invalide.');return;}
-  S.passes[editIdx].c=n; S.passes[editIdx].r=document.getElementById('modal-refus').checked;
-  save(); render(); closeModalDirect();
-}
-function deleteRow() {
-  if(editIdx<0) return;
-  const p=S.passes[editIdx];
-  if(!confirm('Supprimer la passe '+p.d0+'–'+p.d1+' cm ?')) return;
-  S.passes.splice(editIdx,1);
-  S.passes=S.passes.map((p,i)=>({...p,d0:i*10,d1:i*10+10}));
-  save(); render(); closeModalDirect();
-}
-
-// ══ GRAPHIQUE ═════════════════════════════════════════════════════════
-function renderChart() {
-  const wrap=document.getElementById('chart-wrap');
-  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null);
-  if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
-
-  const maxQd=Math.max(...pts.map(x=>x.qd))*1.15||1;
-  const minD=Math.min(...pts.map(x=>x.d));
-  const totalD=Math.abs(minD)||1;
-  const PL=55,PR=16,PT=20,PB=28,W=320,chartW=W-PL-PR;
-  const chartH=Math.max(180,pts.length*20);
-  const H=chartH+PT+PB;
-
-  const xS=v=>PL+(v/maxQd)*chartW;
-  const yS=d=>PT+((0-d)/totalD)*chartH;
-
-  let path='',dots='',labels='';
-  pts.forEach((x,i)=>{
-    const px=xS(x.qd).toFixed(1),py=yS(x.d).toFixed(1);
-    path+=(i===0?'M':'L')+px+','+py+' ';
-    dots+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#185FA5"/>`;
-    labels+=`<text x="${(parseFloat(px)+6).toFixed(1)}" y="${(parseFloat(py)+4).toFixed(1)}" font-size="8" fill="#185FA5">${x.qd.toFixed(2)}</text>`;
-  });
-
-  let xGrid='',xLbl='';
-  for(let i=0;i<=4;i++){
-    const v=maxQd*i/4, x=xS(v).toFixed(1);
-    xGrid+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT+chartH}" stroke="#D6D2CA" stroke-width="0.5"/>`;
-    xLbl+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="#6B6560">${v.toFixed(1)}</text>`;
-  }
-
-  let yGrid='',yLbl='';
-  pts.forEach(x=>{
-    const py=yS(x.d).toFixed(1);
-    yGrid+=`<line x1="${PL}" y1="${py}" x2="${PL+chartW}" y2="${py}" stroke="#EAE8E4" stroke-width="0.5"/>`;
-    yLbl+=`<text x="${PL-4}" y="${(parseFloat(py)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#6B6560">${x.d.toFixed(1)}</text>`;
-  });
-
-  const area=`M${xS(0).toFixed(1)},${yS(pts[0].d).toFixed(1)} ${path} L${PL},${yS(pts[pts.length-1].d).toFixed(1)} Z`;
-
-  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    ${xGrid}${yGrid}
-    <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
-    <line x1="${PL}" y1="${PT+chartH}" x2="${PL+chartW}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
-    <path d="${area}" fill="#185FA5" fill-opacity="0.08"/>
-    <path d="${path}" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}${labels}${yLbl}${xLbl}
-    <text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa]</text>
-    <text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>
-  </svg>`;
-
-  const c=S.cfg;
-  document.getElementById('params-summary').innerHTML=
-    `M = ${c.M} kg &nbsp;·&nbsp; h = ${c.h} m &nbsp;·&nbsp; A = ${c.A} cm²<br>
-     Mg = ${c.Mg} kg &nbsp;·&nbsp; Mt = ${c.Mt} kg &nbsp;·&nbsp; Mp = ${c.Mp} kg<br>
-     <span style="font-size:11px;">qd = (M·g·h)/(A·e/N) · M/(M+Mg+Mp+n·Mt) / 10⁶</span>`;
+function saveConfig() {
+  S.cfg.chantier  =document.getElementById('cfg-chantier').value.trim();
+  S.cfg.sondage   =document.getElementById('cfg-sondage').value.trim()||'SP1';
+  S.cfg.operateur =document.getElementById('cfg-operateur').value.trim();
+  S.cfg.date      =document.getElementById('cfg-date').value;
+  S.cfg.profMax   =parseInt(document.getElementById('cfg-profmax').value)||800;
+  S.cfg.refusSeuil=parseInt(document.getElementById('cfg-refus').value)||50;
+  S.cfg.M =parseFloat(document.getElementById('cfg-M').value)||10;
+  S.cfg.h =parseFloat(document.getElementById('cfg-h').value)||0.54;
+  S.cfg.Mg=parseFloat(document.getElementById('cfg-Mg').value)||5.21;
+  S.cfg.Mt=parseFloat(document.getElementById('cfg-Mt').value)||0.59;
+  S.cfg.Mp=parseFloat(document.getElementById('cfg-Mp').value)||0.06;
+  S.cfg.A =parseFloat(document.getElementById('cfg-A').value)||4;
+  S.cfg.Lt=parseFloat(document.getElementById('cfg-Lt').value)||1;
+  save(); render(); showTab('saisie');
 }
 
 // ══ RENDER ════════════════════════════════════════════════════════════
 function badge(c,r) {
-  if(r)                      return '<span class="badge b-stop">REFUS</span>';
-  if(c>=S.cfg.refusSeuil)   return '<span class="badge b-stop">'+c+'</span>';
-  if(c>=25)                  return '<span class="badge b-warn">'+c+'</span>';
+  if (r)                     return '<span class="badge b-stop">REFUS</span>';
+  if (c>=S.cfg.refusSeuil)  return '<span class="badge b-stop">'+c+'</span>';
+  if (c>=25)                 return '<span class="badge b-warn">'+c+'</span>';
   return '<span class="badge b-ok">'+c+'</span>';
 }
 
 function buildTable(passes, showQd) {
-  if(!passes.length) return '<div class="empty">Aucune donnée</div>';
+  if (!passes.length) return '<div class="empty">Aucune donnée</div>';
   let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th>qd MPa</th>':'')+'<th>Tiges</th></tr>';
-  passes.forEach(p=>{
+  passes.forEach(p => {
     const ri=S.passes.indexOf(p), qd=calcQd(p.c,p.n);
     h+=`<tr class="data-row${p.r?' refus-row':''}" onclick="openEditModal(${ri})">
-      <td>${p.d0}–${p.d1}</td><td>${badge(p.c,p.r)}</td>
+      <td>${p.d0}–${p.d1}</td>
+      <td>${badge(p.c,p.r)}</td>
       ${showQd?`<td>${(!p.r&&qd!==null)?qd.toFixed(2):'—'}</td>`:''}
       <td>${p.n}</td></tr>`;
   });
-  return h+'</table>';
+  return h + '</table>';
 }
 
 function render() {
   const d=depth(), ln=S.passes.length+1;
   document.getElementById('topbar-title').textContent=(S.cfg.chantier?S.cfg.chantier+' · ':'')+S.cfg.sondage;
-  document.getElementById('depth-val').textContent=d;
+  document.getElementById('depth-val').textContent  =d;
   document.getElementById('layer-label').textContent='Couche '+ln+' · '+d+'–'+(d+10)+' cm';
-  document.getElementById('coup-val').textContent=S.coups;
-  document.getElementById('tiges-val').textContent=S.tiges;
-  document.getElementById('tiges-m').textContent=tigesM(S.tiges)+' m';
+  document.getElementById('coup-val').textContent   =S.coups;
+  document.getElementById('tiges-val').textContent  =S.tiges;
+  document.getElementById('tiges-m').textContent    =tigesM(S.tiges)+' m';
 
-  // Saisie table — all passes, recent first
-  const rts=document.getElementById('recent-table-saisie');
-  rts.innerHTML=S.passes.length ? buildTable([...S.passes].reverse(),false) : '<div class="empty">Aucune passe enregistrée</div>';
-
-  // Full table
-  const ordered=sortDesc?[...S.passes].reverse():[...S.passes];
-  document.getElementById('full-table').innerHTML=buildTable(ordered,true);
+  // Both tables show same data, same sort
+  const ordered = sortDesc ? [...S.passes].reverse() : [...S.passes];
+  document.getElementById('table-saisie').innerHTML  = buildTable(ordered, true);
+  document.getElementById('table-donnees').innerHTML = buildTable(ordered, true);
 
   // Stats
   const total=S.passes.reduce((a,p)=>a+p.c,0), refN=S.passes.filter(p=>p.r).length;
   const sc=document.getElementById('stats-card'), sr=document.getElementById('stats-row');
-  if(S.passes.length){
+  if (S.passes.length) {
     sc.style.display='';
     sr.innerHTML=stat(S.passes.length,'passes')+stat(d+' cm','profondeur')+stat(total,'coups total')+(refN?stat(refN,'refus'):'');
   } else sc.style.display='none';
@@ -648,17 +677,48 @@ function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div
 
 function syncFields(){
   const c=S.cfg;
-  ['chantier','sondage','operateur'].forEach(k=>document.getElementById('cfg-'+k).value=c[k]||'');
-  document.getElementById('cfg-date').value=c.date||'';
-  document.getElementById('cfg-profmax').value=c.profMax||800;
-  document.getElementById('cfg-refus').value=c.refusSeuil||50;
-  document.getElementById('cfg-M').value=c.M||10;
-  document.getElementById('cfg-h').value=c.h||0.54;
+  document.getElementById('cfg-chantier').value =c.chantier||'';
+  document.getElementById('cfg-sondage').value  =c.sondage||'SP1';
+  document.getElementById('cfg-operateur').value=c.operateur||'';
+  document.getElementById('cfg-date').value     =c.date||'';
+  document.getElementById('cfg-profmax').value  =c.profMax||800;
+  document.getElementById('cfg-refus').value    =c.refusSeuil||50;
+  document.getElementById('cfg-M').value =c.M||10;
+  document.getElementById('cfg-h').value =c.h||0.54;
   document.getElementById('cfg-Mg').value=c.Mg||5.21;
   document.getElementById('cfg-Mt').value=c.Mt||0.59;
   document.getElementById('cfg-Mp').value=c.Mp||0.06;
-  document.getElementById('cfg-A').value=c.A||4;
+  document.getElementById('cfg-A').value =c.A||4;
   document.getElementById('cfg-Lt').value=c.Lt||1;
+}
+
+// ══ GRAPHIQUE ═════════════════════════════════════════════════════════
+function renderChart() {
+  const wrap=document.getElementById('chart-wrap');
+  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null);
+  if (!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
+
+  const maxQd=Math.max(...pts.map(x=>x.qd))*1.15||1;
+  const minD=Math.min(...pts.map(x=>x.d)), totalD=Math.abs(minD)||1;
+  const PL=55,PR=16,PT=20,PB=28,W=320,chartW=W-PL-PR;
+  const chartH=Math.max(180,pts.length*20), H=chartH+PT+PB;
+  const xS=v=>PL+(v/maxQd)*chartW, yS=d=>PT+((0-d)/totalD)*chartH;
+
+  let path='',dots='',lbls='';
+  pts.forEach((x,i)=>{
+    const px=xS(x.qd).toFixed(1),py=yS(x.d).toFixed(1);
+    path+=(i===0?'M':'L')+px+','+py+' ';
+    dots+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#185FA5"/>`;
+    lbls+=`<text x="${(parseFloat(px)+6).toFixed(1)}" y="${(parseFloat(py)+4).toFixed(1)}" font-size="8" fill="#185FA5">${x.qd.toFixed(2)}</text>`;
+  });
+  let xG='',xL='';
+  for(let i=0;i<=4;i++){const v=maxQd*i/4,x=xS(v).toFixed(1);xG+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT+chartH}" stroke="#D6D2CA" stroke-width="0.5"/>`;xL+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="#6B6560">${v.toFixed(1)}</text>`;}
+  let yG='',yL='';
+  pts.forEach(x=>{const py=yS(x.d).toFixed(1);yG+=`<line x1="${PL}" y1="${py}" x2="${PL+chartW}" y2="${py}" stroke="#EAE8E4" stroke-width="0.5"/>`;yL+=`<text x="${PL-4}" y="${(parseFloat(py)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#6B6560">${x.d.toFixed(1)}</text>`;});
+  const area=`M${xS(0).toFixed(1)},${yS(pts[0].d).toFixed(1)} ${path} L${PL},${yS(pts[pts.length-1].d).toFixed(1)} Z`;
+  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${xG}${yG}<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/><line x1="${PL}" y1="${PT+chartH}" x2="${PL+chartW}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/><path d="${area}" fill="#185FA5" fill-opacity="0.08"/><path d="${path}" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${lbls}${yL}${xL}<text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa]</text><text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text></svg>`;
+  const c=S.cfg;
+  document.getElementById('params-summary').innerHTML=`M=${c.M}kg · h=${c.h}m · A=${c.A}cm²<br>Mg=${c.Mg}kg · Mt=${c.Mt}kg · Mp=${c.Mp}kg<br><span style="font-size:11px;">qd = (M·g·h)/(A·e/N) · M/(M+Mg+Mp+n·Mt) / 10⁶</span>`;
 }
 
 // ══ TABS ══════════════════════════════════════════════════════════════
@@ -668,9 +728,60 @@ function showTab(t){
   if(t==='graphique') renderChart();
 }
 
-if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 
+// ══ MAP (Leaflet + IGN Géoportail) ════════════════════════════════════
+let _map = null;
+let _marker = null;
+const IGN_KEY = '75942367-7f71-49c8-bf21-9116ecb2ac22';
+
+function initMap(lat, lon) {
+  const mapEl = document.getElementById('map');
+  const placeholder = document.getElementById('map-placeholder');
+
+  placeholder.style.display = 'none';
+  mapEl.style.display = 'block';
+
+  if (_map) {
+    _map.setView([lat, lon], 18);
+    _marker.setLatLng([lat, lon]);
+    return;
+  }
+
+  _map = L.map('map', { zoomControl: true, attributionControl: true }).setView([lat, lon], 18);
+
+  // IGN Orthophoto layer — nouvelle URL Géoplateforme (sans clé depuis 2024)
+  L.tileLayer(
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+    '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
+    '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    {
+      attribution: '© IGN Géoportail',
+      maxZoom: 19,
+      maxNativeZoom: 19,
+      tileSize: 256
+    }
+  ).addTo(_map);
+
+  // Marker
+  const icon = L.divIcon({
+    html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    className: ''
+  });
+  _marker = L.marker([lat, lon], { icon }).addTo(_map);
+  _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
+}
+
+function resetMap() {
+  document.getElementById('map').style.display = 'none';
+  document.getElementById('map-placeholder').style.display = 'flex';
+  if (_map) { _map.remove(); _map = null; _marker = null; }
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 load();
 </script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 </body>
 </html>
