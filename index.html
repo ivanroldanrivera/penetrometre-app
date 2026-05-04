@@ -265,6 +265,7 @@
       </div>
       <div id="map-placeholder" style="height:100px;display:flex;align-items:center;justify-content:center;color:#6B6560;font-size:13px;background:#ECEAE5;border-radius:9px;margin-top:12px;border:0.5px solid #D6D2CA;">📍 Capturez une position GPS pour afficher la carte</div>
       <div id="map" style="display:none;height:260px;width:100%;border-radius:9px;margin-top:12px;overflow:hidden;"></div>
+      <div id="map-drag-hint" style="display:none;font-size:10px;color:#6B6560;text-align:center;margin-top:5px;">☝ Faites glisser le marqueur pour ajuster la position</div>
     </div>
     <div class="data-btns">
       <button class="btn-blue" onclick="exportCSV()">⬇ Exporter CSV</button>
@@ -770,6 +771,8 @@ function initMap(lat, lon) {
 
   placeholder.style.display = 'none';
   mapEl.style.display = 'block';
+  const hint = document.getElementById('map-drag-hint');
+  if (hint) hint.style.display = 'block';
 
   if (_map) {
     _map.setView([lat, lon], 18);
@@ -799,8 +802,20 @@ function initMap(lat, lon) {
     iconAnchor: [7, 7],
     className: ''
   });
-  _marker = L.marker([lat, lon], { icon }).addTo(_map);
+  _marker = L.marker([lat, lon], { icon, draggable: true }).addTo(_map);
   _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
+
+  _marker.on('dragend', function(e) {
+    const pos = e.target.getLatLng();
+    S.gps.lat = parseFloat(pos.lat.toFixed(6));
+    S.gps.lon = parseFloat(pos.lng.toFixed(6));
+    S.gps.acc = 0;
+    S.gps.ts  = new Date().toISOString();
+    save();
+    _marker.setPopupContent('<b>Sondage</b> (ajusté)<br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
+    document.getElementById('gps-coords').textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
+    document.getElementById('gps-meta').textContent = 'Position ajustée manuellement';
+  });
 }
 
 function resetMap() {

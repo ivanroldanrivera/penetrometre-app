@@ -529,10 +529,27 @@ function renderMap(gps) {
       html: '<div style="width:12px;height:12px;background:#185FA5;border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>',
       iconSize:[12,12], iconAnchor:[6,6], className:''
     });
-    L.marker([gps.lat, gps.lon], {icon})
+    const marker = L.marker([gps.lat, gps.lon], {icon, draggable: true})
       .bindPopup('<b>' + (window._currentSondage||'Sondage') + '</b><br>' + gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6))
       .addTo(_rmap)
       .openPopup();
+
+    marker.on('dragend', function(e) {
+      const pos = e.target.getLatLng();
+      const lat = parseFloat(pos.lat.toFixed(6));
+      const lon = parseFloat(pos.lng.toFixed(6));
+      marker.setPopupContent('<b>' + (window._currentSondage||'Sondage') + '</b> (ajusté)<br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
+      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6) + '  (ajusté manuellement)';
+      // Update localStorage if available
+      try {
+        const raw = localStorage.getItem('pdl_v5');
+        if (raw) {
+          const S = JSON.parse(raw);
+          S.gps.lat = lat; S.gps.lon = lon; S.gps.acc = 0;
+          localStorage.setItem('pdl_v5', JSON.stringify(S));
+        }
+      } catch(e) {}
+    });
   }, 100);
 }
 
