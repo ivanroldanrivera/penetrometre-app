@@ -384,7 +384,7 @@
 <script>
 // ══ STATE ══════════════════════════════════════════════════════════════
 let S = {
-  passes: [], coups: 0, tiges: 0, gps: null,
+  passes: [], coups: 0, tiges: 1, gps: null,
   cfg: {
     chantier:'', sondage:'SP1', operateur:'', date:today(),
     profMax:800, refusSeuil:50,
@@ -401,7 +401,7 @@ function today() { return new Date().toISOString().slice(0,10); }
 function load() {
   try { const s = localStorage.getItem('pdl_v5'); if (s) S = JSON.parse(s); } catch(e) {}
   if (!S.gps)    S.gps    = null;
-  if (!S.tiges)  S.tiges  = 0;
+  if (!S.tiges)  S.tiges  = 1;
   if (!S.cfg.Lt) S.cfg.Lt = 1;
   syncFields(); render();
 }
@@ -605,7 +605,7 @@ function nouveauSondage() {
   const cur=S.cfg.sondage||'SP1', num=parseInt(cur.replace(/\D/g,'')||'1'), pfx=cur.replace(/\d+/g,'');
   const nom=prompt('Numéro du nouveau sondage :', pfx+(num+1));
   if (nom===null) return;
-  S.passes=[]; S.coups=0; S.tiges=0; S.gps=null; S.cfg.sondage=nom||pfx+(num+1); if(typeof resetMap!=='undefined') resetMap();
+  S.passes=[]; S.coups=0; S.tiges=1; S.gps=null; S.cfg.sondage=nom||pfx+(num+1); if(typeof resetMap!=='undefined') resetMap();
   save(); syncFields(); render();
 }
 
