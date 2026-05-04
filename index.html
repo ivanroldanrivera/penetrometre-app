@@ -692,17 +692,21 @@ function syncFields(){
   document.getElementById('cfg-Lt').value=c.Lt||1;
 }
 
-// ══ GRAPHIQUE ═════════════════════════════════════════════════════════
+// ══ GRAPHIQUE (log scale X, no fill) ═════════════════════════════════
 function renderChart() {
   const wrap=document.getElementById('chart-wrap');
-  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null);
-  if (!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
+  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
+  if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
 
-  const maxQd=Math.max(...pts.map(x=>x.qd))*1.15||1;
+  const minQd=Math.max(0.01,Math.min(...pts.map(x=>x.qd))*0.5);
+  const maxQd=Math.max(...pts.map(x=>x.qd))*2;
   const minD=Math.min(...pts.map(x=>x.d)), totalD=Math.abs(minD)||1;
   const PL=55,PR=16,PT=20,PB=28,W=320,chartW=W-PL-PR;
   const chartH=Math.max(180,pts.length*20), H=chartH+PT+PB;
-  const xS=v=>PL+(v/maxQd)*chartW, yS=d=>PT+((0-d)/totalD)*chartH;
+
+  const logMin=Math.log10(minQd), logMax=Math.log10(maxQd), logRange=logMax-logMin||1;
+  const xS=v=>PL+(Math.log10(Math.max(v,minQd))-logMin)/logRange*chartW;
+  const yS=d=>PT+((0-d)/totalD)*chartH;
 
   let path='',dots='',lbls='';
   pts.forEach((x,i)=>{
@@ -711,14 +715,40 @@ function renderChart() {
     dots+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#185FA5"/>`;
     lbls+=`<text x="${(parseFloat(px)+6).toFixed(1)}" y="${(parseFloat(py)+4).toFixed(1)}" font-size="8" fill="#185FA5">${x.qd.toFixed(2)}</text>`;
   });
+
   let xG='',xL='';
-  for(let i=0;i<=4;i++){const v=maxQd*i/4,x=xS(v).toFixed(1);xG+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT+chartH}" stroke="#D6D2CA" stroke-width="0.5"/>`;xL+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="#6B6560">${v.toFixed(1)}</text>`;}
+  const logTicks=[];
+  for(let exp=Math.floor(logMin);exp<=Math.ceil(logMax);exp++){
+    for(const m of [1,2,5]){
+      const v=m*Math.pow(10,exp);
+      if(v>=minQd*0.9&&v<=maxQd*1.1) logTicks.push(v);
+    }
+  }
+  [...new Set(logTicks)].sort((a,b)=>a-b).forEach(v=>{
+    const x=xS(v).toFixed(1);
+    xG+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT+chartH}" stroke="#D6D2CA" stroke-width="0.5"/>`;
+    const lbl=v>=1?v.toFixed(v<10?1:0):v.toFixed(2);
+    xL+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="#6B6560">${lbl}</text>`;
+  });
+
   let yG='',yL='';
-  pts.forEach(x=>{const py=yS(x.d).toFixed(1);yG+=`<line x1="${PL}" y1="${py}" x2="${PL+chartW}" y2="${py}" stroke="#EAE8E4" stroke-width="0.5"/>`;yL+=`<text x="${PL-4}" y="${(parseFloat(py)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#6B6560">${x.d.toFixed(1)}</text>`;});
-  const area=`M${xS(0).toFixed(1)},${yS(pts[0].d).toFixed(1)} ${path} L${PL},${yS(pts[pts.length-1].d).toFixed(1)} Z`;
-  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${xG}${yG}<line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/><line x1="${PL}" y1="${PT+chartH}" x2="${PL+chartW}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/><path d="${area}" fill="#185FA5" fill-opacity="0.08"/><path d="${path}" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${lbls}${yL}${xL}<text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa]</text><text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text></svg>`;
+  pts.forEach(x=>{
+    const py=yS(x.d).toFixed(1);
+    yG+=`<line x1="${PL}" y1="${py}" x2="${PL+chartW}" y2="${py}" stroke="#EAE8E4" stroke-width="0.5"/>`;
+    yL+=`<text x="${PL-4}" y="${(parseFloat(py)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#6B6560">${x.d.toFixed(1)}</text>`;
+  });
+
+  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    ${xG}${yG}
+    <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
+    <line x1="${PL}" y1="${PT+chartH}" x2="${PL+chartW}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
+    <path d="${path}" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}${lbls}${yL}${xL}
+    <text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa] — échelle log</text>
+    <text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>
+  </svg>`;
   const c=S.cfg;
-  document.getElementById('params-summary').innerHTML=`M=${c.M}kg · h=${c.h}m · A=${c.A}cm²<br>Mg=${c.Mg}kg · Mt=${c.Mt}kg · Mp=${c.Mp}kg<br><span style="font-size:11px;">qd = (M·g·h)/(A·e/N) · M/(M+Mg+Mp+n·Mt) / 10⁶</span>`;
+  document.getElementById('params-summary').innerHTML=`M=${c.M}kg · h=${c.h}m · A=${c.A}cm²<br>Mg=${c.Mg}kg · Mt=${c.Mt}kg · Mp=${c.Mp}kg<br><span style="font-size:11px;">qd=(M·g·h)/(A·e/N)·M/(M+Mg+Mp+n·Mt)/10⁶ &nbsp;·&nbsp; e=enfoncement par passe=0,10 m &nbsp;·&nbsp; A en m²=section/10 000</span>`;
 }
 
 // ══ TABS ══════════════════════════════════════════════════════════════
