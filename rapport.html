@@ -145,7 +145,7 @@
   /* ── INFO GRID ── */
   .info-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 3mm;
   }
   .info-cell {
@@ -182,9 +182,9 @@
   .data-table td { padding: 1.5mm 2mm; text-align: center; border-bottom: 0.3px solid var(--rule); font-family: 'DM Mono', monospace; font-size: 8px; }
   .data-table tr:nth-child(even) td { background: var(--paper2); }
   .data-table tr.refus td { background: #FFF0F0; color: var(--red); font-weight: 500; }
-  .data-table .qd-high { color: var(--red); font-weight: 600; }
-  .data-table .qd-mid  { color: var(--green); }
-  .data-table .qd-low  { color: var(--ink2); }
+  .data-table .qd-high { color: var(--ink); }
+  .data-table .qd-mid  { color: var(--ink); }
+  .data-table .qd-low  { color: var(--ink); }
   .table-footer { font-size: 8px; color: var(--ink3); margin-top: 2mm; text-align: right; font-style: italic; }
 
   /* ── CHART ── */
@@ -214,6 +214,12 @@
 
   /* ── NO DATA ── */
   .no-data { text-align: center; padding: 10mm; color: var(--ink3); font-size: 12px; }
+
+  /* ── PHOTOS REPORT ── */
+  .photos-report-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:3mm; }
+  .photo-rep { background:var(--paper2); border:0.3px solid var(--rule); border-radius:2px; overflow:hidden; break-inside:avoid; }
+  .photo-rep img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block; }
+  .photo-rep-cap { font-size:8px; color:var(--ink2); padding:1.5mm 2mm; text-align:center; font-style:italic; border-top:0.3px solid var(--rule); }
 
   /* ── PRINT ── */
   @media print {
@@ -263,9 +269,7 @@
       <div class="info-cell"><div class="info-cell-label">Opérateur</div><div class="info-cell-value" id="inf-operateur">—</div></div>
       <div class="info-cell"><div class="info-cell-label">Date</div><div class="info-cell-value" id="inf-date">—</div></div>
       <div class="info-cell"><div class="info-cell-label">Profondeur atteinte</div><div class="info-cell-value" id="inf-prof">—</div></div>
-      <div class="info-cell"><div class="info-cell-label">Nb passes</div><div class="info-cell-value" id="inf-passes">—</div></div>
-      <div class="info-cell"><div class="info-cell-label">Total coups</div><div class="info-cell-value" id="inf-coups">—</div></div>
-      <div class="info-cell"><div class="info-cell-label">Refus</div><div class="info-cell-value" id="inf-refus">—</div></div>
+      <div class="info-cell"><div class="info-cell-label">Niveau d'eau</div><div class="info-cell-value" id="inf-eau">—</div></div>
     </div>
   </div>
 
@@ -281,6 +285,7 @@
       <div class="param-cell"><div class="param-label">A</div><div class="param-value" id="p-A">—</div><div class="param-unit">cm² · section pointe</div></div>
     </div>
     <div style="margin-top:2mm;font-size:8px;color:var(--ink3);font-style:italic;">
+      Niveau d'eau : <span id='param-eau'>—</span><br>
       Formule : q<sub>d</sub> = (M·g·h) / (A·e/N) · M/(M+Mg+Mp+n·Mt) / 10⁶ &nbsp;[MPa]<br>      <span style="font-size:7.5px;color:#6B6560;">avec : e = enfoncement par passe = 10 cm = 0,10 m &nbsp;·&nbsp; N = nombre de coups &nbsp;·&nbsp; n = nombre de tiges &nbsp;·&nbsp; A en m² (= section/10 000)</span>
     </div>
   </div>
@@ -302,14 +307,27 @@
         <div id="chart-wrap-report"><div class="no-data" style="height:80mm;display:flex;align-items:center;justify-content:center;">Aucune donnée</div></div>
       </div>
 
-      <div class="section-title" style="margin-top:4mm;">Localisation GPS</div>
-      <div id="report-map-wrap">
-        <div class="no-data" style="height:55mm;display:flex;align-items:center;justify-content:center;border:0.5px solid var(--rule);border-radius:3px;" id="map-nodata">Coordonnées GPS non enregistrées</div>
-        <div id="report-map" style="display:none;"></div>
+      <div id="gps-section" style="display:none;">
+        <div class="section-title" style="margin-top:4mm;">Localisation GPS</div>
+        <div id="report-map-wrap">
+          <div id="report-map" style="height:55mm;"></div>
+        </div>
+        <div class="map-caption">Fond de carte © IGN Géoportail</div>
+        <div class="gps-coords-display" id="gps-display">—</div>
       </div>
-      <div class="map-caption">Fond de carte © OpenStreetMap contributors</div>
-      <div class="gps-coords-display" id="gps-display">—</div>
     </div>
+  </div>
+
+  <!-- OBSERVATIONS -->
+  <div class="section" id="obs-section" style="display:none;">
+    <div class="section-title">Observations</div>
+    <div id="obs-body" style="font-size:10px;color:var(--ink2);line-height:1.5;white-space:pre-wrap;padding:2mm 3mm;background:var(--paper2);border-radius:3px;border-left:2px solid var(--accent);"></div>
+  </div>
+
+  <!-- PHOTOS -->
+  <div class="section" id="photos-section" style="display:none;">
+    <div class="section-title">Photos du site</div>
+    <div id="photos-report-grid" class="photos-report-grid"></div>
   </div>
 
   <!-- FOOTER -->
@@ -364,10 +382,12 @@ function renderReport(S) {
   document.getElementById('inf-sondage').textContent  = c.sondage    || '—';
   document.getElementById('inf-operateur').textContent= c.operateur  || '—';
   document.getElementById('inf-date').textContent     = c.date       || '—';
-  document.getElementById('inf-prof').textContent     = depth + ' cm (' + (depth/100).toFixed(2) + ' m)';
-  document.getElementById('inf-passes').textContent   = passes.length;
-  document.getElementById('inf-coups').textContent    = totalCoups;
-  document.getElementById('inf-refus').textContent    = refusN || '0';
+  document.getElementById('inf-prof').textContent     = (depth/100).toFixed(2) + ' m';
+  document.getElementById('inf-eau').textContent      = S.niveauEau !== undefined && S.niveauEau !== null ? S.niveauEau + ' m' : 'Non rencontré';
+
+  // Niveau eau param display
+  const paramEau = document.getElementById('param-eau');
+  if (paramEau) paramEau.textContent = S.niveauEau !== undefined && S.niveauEau !== null ? S.niveauEau + ' m' : 'Non rencontré';
 
   // Params
   document.getElementById('p-M').textContent  = c.M   || '—';
@@ -389,6 +409,36 @@ function renderReport(S) {
 
   // Map
   renderMap(S.gps);
+
+  // Observations
+  renderObservations(S.observations || '');
+
+  // Photos
+  renderPhotosReport(S.photos || []);
+}
+
+function renderObservations(text) {
+  const sec = document.getElementById('obs-section');
+  const body = document.getElementById('obs-body');
+  if (!sec || !body) return;
+  if (!text || !text.trim()) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  body.textContent = text;
+}
+
+function renderPhotosReport(photos) {
+  const sec = document.getElementById('photos-section');
+  const grid = document.getElementById('photos-report-grid');
+  if (!sec || !grid) return;
+  if (!photos.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  grid.innerHTML = photos.map((p, i) => {
+    const cap = (p.caption || '').replace(/</g,'&lt;');
+    return '<div class="photo-rep">' +
+      '<img src="' + p.dataUrl + '" alt="Photo ' + (i+1) + '">' +
+      '<div class="photo-rep-cap">' + (cap || ('Photo ' + (i+1))) + '</div>' +
+      '</div>';
+  }).join('');
 }
 
 // ── TABLE ─────────────────────────────────────────────────────────────
@@ -397,22 +447,26 @@ function renderTable(passes, cfg) {
   if (!passes.length) { wrap.innerHTML='<div class="no-data">Aucune donnée</div>'; return; }
 
   let rows = '';
+  let hasNotes = false;
+  passes.forEach(p => { if (p.note && p.note.trim()) hasNotes = true; });
   passes.forEach(p => {
     const qd = calcQd(p.c, p.n, cfg);
     const qdStr = qd ? qd.toFixed(2) : (p.r ? 'REF' : '—');
     const qdClass = qd > 5 ? 'qd-high' : qd > 2 ? '' : 'qd-low';
+    const noteCell = hasNotes ? '<td style="text-align:left;font-size:7.5px;font-family:DM Sans;">' + ((p.note || '').replace(/</g,'&lt;')) + '</td>' : '';
     rows += `<tr class="${p.r?'refus':''}">
       <td>${(p.d0/100).toFixed(2)}</td>
       <td>${(p.d1/100).toFixed(2)}</td>
       <td>${p.c}</td>
       <td>${p.n}</td>
       <td class="${qdClass}">${qdStr}</td>
+      ${noteCell}
     </tr>`;
   });
 
   wrap.innerHTML = `<table class="data-table">
     <thead><tr>
-      <th>De (m)</th><th>À (m)</th><th>N</th><th>Tiges</th><th>qd MPa</th>
+      <th>De (m)</th><th>À (m)</th><th>N</th><th>Tiges</th><th>qd MPa</th>${hasNotes ? '<th>Note</th>' : ''}
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -454,7 +508,7 @@ function renderChart(passes, cfg) {
     const px=xS(x.qd).toFixed(1), py=yS(x.d).toFixed(1);
     path += (i===0?'M':'L') + px + ',' + py + ' ';
     dots += `<circle cx="${px}" cy="${py}" r="2.5" fill="#185FA5"/>`;
-    qlbls+= `<text x="${(parseFloat(px)+5).toFixed(1)}" y="${(parseFloat(py)+3).toFixed(1)}" font-size="7" fill="#185FA5">${x.qd.toFixed(2)}</text>`;
+    qlbls+= `<text x="${(parseFloat(px)+5).toFixed(1)}" y="${(parseFloat(py)+3).toFixed(1)}" font-size="7" fill="#1A1714">${x.qd.toFixed(2)}</text>`;
   });
 
   let xG='', xL='';
@@ -495,19 +549,15 @@ function renderChart(passes, cfg) {
 let _rmap = null;
 function renderMap(gps) {
   const mapDiv  = document.getElementById('report-map');
-  const nodata  = document.getElementById('map-nodata');
   const display = document.getElementById('gps-display');
 
+  const gpsSection = document.getElementById('gps-section');
   if (!gps) {
-    mapDiv.style.display='none';
-    nodata.style.display='flex';
-    display.textContent='—';
+    if (gpsSection) gpsSection.style.display = 'none';
     return;
   }
-
-  nodata.style.display='none';
-  mapDiv.style.display='block';
-  display.textContent = gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6) + '  (± ' + gps.acc + ' m)';
+  if (gpsSection) gpsSection.style.display = 'block';
+  display.textContent = gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6) + (gps.acc > 0 ? '  (± ' + gps.acc + ' m)' : '');
 
   setTimeout(() => {
     if (_rmap) { _rmap.remove(); _rmap = null; }
@@ -518,7 +568,7 @@ function renderMap(gps) {
       '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
       '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
       {
-        attribution: '© IGN Géoportail',
+        attribution: '© IGN Géoportail — Orthophotos',
         maxZoom: 19,
         maxNativeZoom: 19,
         tileSize: 256
@@ -538,8 +588,8 @@ function renderMap(gps) {
       const pos = e.target.getLatLng();
       const lat = parseFloat(pos.lat.toFixed(6));
       const lon = parseFloat(pos.lng.toFixed(6));
-      marker.setPopupContent('<b>' + (window._currentSondage||'Sondage') + '</b> (ajusté)<br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
-      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6) + '  (ajusté manuellement)';
+      marker.setPopupContent('<b>' + (window._currentSondage||'Sondage') + '</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
+      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
       // Update localStorage if available
       try {
         const raw = localStorage.getItem('pdl_v5');
@@ -553,32 +603,7 @@ function renderMap(gps) {
   }, 100);
 }
 
-// ── LOGO ─────────────────────────────────────────────────────────────
-function loadLogo(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    document.getElementById('logo-placeholder').style.display='none';
-    const img = document.getElementById('logo-img');
-    img.src = ev.target.result;
-    img.style.display='block';
-  };
-  reader.readAsDataURL(file);
-}
-
-// ── AUTO LOAD ─────────────────────────────────────────────────────────
-window.addEventListener('load', () => {
-  // Try auto-load from same origin localStorage
-  try {
-    const raw = localStorage.getItem('pdl_v5');
-    if (raw) {
-      const S = JSON.parse(raw);
-      window._currentSondage = S.cfg && S.cfg.sondage;
-      renderReport(S);
-    }
-  } catch(e) {}
-});
+loadFromStorage();
 </script>
 </body>
 </html>

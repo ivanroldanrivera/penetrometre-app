@@ -178,8 +178,37 @@
   .tiges-display-val { font-size:48px; font-weight:200; color:var(--blue); line-height:1; }
   .tiges-display-m { font-size:14px; color:var(--text2); margin-top:4px; }
 
+  /* Tiges compare (Actuel → Nouveau) */
+  .tiges-compare { display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 0 6px; }
+  .tig-cell { flex:1; text-align:center; padding:10px 8px; border-radius:9px; background:var(--bg2); border:0.5px solid var(--border); }
+  .tig-cell.tig-cell-new { border-color:var(--blue); background:var(--card); }
+  .tig-cell-lbl { font-size:9px; color:var(--text2); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:6px; }
+  .tig-cell-val { font-size:36px; font-weight:200; color:var(--text); line-height:1; }
+  .tig-cell-new .tig-cell-val { color:var(--blue); }
+  .tig-cell-m { font-size:11px; color:var(--text2); margin-top:3px; }
+  .tig-arrow { font-size:22px; color:var(--text2); align-self:center; }
+  .tig-delta { text-align:center; font-size:12px; font-weight:500; min-height:16px; margin-bottom:8px; }
+  .tig-delta.up { color:var(--green); }
+  .tig-delta.down { color:var(--red); }
+
   .empty { text-align:center; padding:24px; color:var(--text2); font-size:13px; }
   .hidden { display:none; }
+
+  /* OBSERVATIONS */
+  .obs-textarea { width:100%; min-height:70px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; }
+
+  /* PHOTOS */
+  .photos-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .photo-item { position:relative; background:var(--bg2); border:0.5px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+  .photo-item img { width:100%; aspect-ratio:1; object-fit:cover; display:block; cursor:pointer; }
+  .photo-caption { width:100%; padding:6px 8px; font-size:11px; border:none; border-top:0.5px solid var(--border); background:var(--card); color:var(--text); box-sizing:border-box; outline:none; }
+  .photo-del { position:absolute; top:4px; right:4px; width:24px; height:24px; border:none; border-radius:50%; background:rgba(0,0,0,0.55); color:#fff; font-size:13px; cursor:pointer; line-height:1; }
+  .photo-del:active { background:var(--red); }
+  .photo-info { padding:4px 8px; font-size:9px; color:var(--text2); background:var(--card); }
+
+  /* Note indicator */
+  .note-icon { font-size:11px; color:var(--blue); margin-left:4px; }
+  .modal-textarea { width:100%; min-height:60px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; margin-bottom:8px; }
   #map { height:260px; width:100%; background:#ECEAE5; border-radius:9px; margin-top:12px; overflow:hidden; }
   #map-placeholder { height:100px; display:flex; align-items:center; justify-content:center; color:#6B6560; font-size:13px; background:#ECEAE5; border-radius:9px; margin-top:12px; border:0.5px solid #D6D2CA; }
 </style>
@@ -210,7 +239,7 @@
         <div class="depth-block">
           <div style="display:flex;align-items:baseline;gap:6px;">
             <span class="depth-num" id="depth-val">0</span>
-            <span class="depth-unit">cm</span>
+            <span class="depth-unit" id="depth-unit">cm</span>
           </div>
         </div>
         <div class="tiges-block" onclick="openTigesModal()">
@@ -254,14 +283,21 @@
   <!-- ══ DONNÉES ══ -->
   <div id="tab-donnees" class="hidden">
     <div class="gps-card">
-      <div class="clabel">Position GPS</div>
+      <div class="clabel">Localisation &amp; nappe d'eau</div>
       <div class="gps-row">
         <div class="gps-dot" id="gps-dot"></div>
         <div class="gps-info">
-          <div class="gps-coords" id="gps-coords">—</div>
-          <div class="gps-meta"   id="gps-meta">Non enregistrée</div>
+          <div class="gps-coords" id="gps-coords"></div>
+          <div class="gps-meta"   id="gps-meta"></div>
         </div>
         <button class="btn-gps" onclick="captureGPS()">📍 Capturer</button>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:var(--text2);min-width:90px;">Niveau d'eau</span>
+        <input type="number" id="eau-input" placeholder="profondeur (m)" step="0.1" min="0"
+          style="flex:1;padding:7px 10px;font-size:13px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);"
+          onchange="saveEau(this.value)"/>
+        <span style="font-size:11px;color:var(--text2);">m</span>
       </div>
       <div id="map-placeholder" style="height:100px;display:flex;align-items:center;justify-content:center;color:#6B6560;font-size:13px;background:#ECEAE5;border-radius:9px;margin-top:12px;border:0.5px solid #D6D2CA;">📍 Capturez une position GPS pour afficher la carte</div>
       <div id="map" style="display:none;height:260px;width:100%;border-radius:9px;margin-top:12px;overflow:hidden;"></div>
@@ -276,6 +312,18 @@
     </div>
     <div class="card" id="stats-card" style="display:none">
       <div class="stats-row" id="stats-row"></div>
+    </div>
+
+    <div class="card">
+      <div class="clabel">Observations</div>
+      <textarea class="obs-textarea" id="obs-input" placeholder="Notes générales sur le sondage : météo, accès, particularités…" onchange="saveObservations(this.value)"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="clabel">Photos</div>
+      <input type="file" id="photo-input" accept="image/*" capture="environment" multiple style="display:none" onchange="addPhotos(this.files)"/>
+      <button class="btn-blue" style="width:100%;" onclick="document.getElementById('photo-input').click()">📷 Ajouter photo</button>
+      <div id="photos-grid" class="photos-grid"></div>
     </div>
     <div class="card">
       <div class="sort-row">
@@ -316,7 +364,7 @@
       <div class="irow"><label>Masse tige (kg)</label>          <input type="number" id="cfg-Mt" value="0.59" step="0.01"/></div>
       <div class="irow"><label>Masse pointe (kg)</label>        <input type="number" id="cfg-Mp" value="0.06" step="0.01"/></div>
       <div class="irow"><label>Section pointe (cm²)</label>     <input type="number" id="cfg-A"  value="4"    step="0.1"/></div>
-      <div class="irow"><label>Longueur tige (m)</label>        <input type="number" id="cfg-Lt" value="1"    step="0.5"/></div>
+      <div class="irow"><label>Longueur tige (m)</label>        <input type="number" id="cfg-Lt" value="0.5"  step="0.1"/></div>
       <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
     <div class="card">
@@ -346,11 +394,17 @@
     <div class="tiges-propagate-note" id="tiges-prop-note"></div>
     <div class="tiges-current" id="tiges-current-display"></div>
     <div class="tiges-4grid">
-      <button class="tbtn tbtn-m1" onclick="adjustEditTiges(-1)">−1<span class="tbtn-sub">tige</span></button>
-      <button class="tbtn tbtn-mh" onclick="adjustEditTiges(-0.5)">−½<span class="tbtn-sub">0.5 m</span></button>
-      <button class="tbtn tbtn-ph" onclick="adjustEditTiges(0.5)">+½<span class="tbtn-sub">0.5 m</span></button>
-      <button class="tbtn tbtn-p1" onclick="adjustEditTiges(1)">+1<span class="tbtn-sub">tige</span></button>
+      <button class="tbtn tbtn-m1" onclick="adjustEditTiges(-2)">−2<span class="tbtn-sub">tiges</span></button>
+      <button class="tbtn tbtn-mh" onclick="adjustEditTiges(-1)">−1<span class="tbtn-sub">tige</span></button>
+      <button class="tbtn tbtn-ph" onclick="adjustEditTiges(1)">+1<span class="tbtn-sub">tige</span></button>
+      <button class="tbtn tbtn-p1" onclick="adjustEditTiges(2)">+2<span class="tbtn-sub">tiges</span></button>
     </div>
+
+    <div class="modal-sep"></div>
+
+    <!-- Note -->
+    <div class="modal-section-label">Note (optionnel)</div>
+    <textarea class="modal-textarea" id="modal-note" placeholder="Observation sur cette passe…"></textarea>
 
     <div class="modal-btns-3">
       <button class="mbtn mbtn-cancel" onclick="closeEditModalDirect()">Annuler</button>
@@ -364,16 +418,26 @@
 <div class="modal-overlay hidden" id="tiges-modal" onclick="closeTigesModal(event)">
   <div class="modal">
     <div class="modal-title">Tiges ajoutées</div>
-    <div class="modal-sub">Modifie la valeur courante (passiées futures)</div>
-    <div class="tiges-display">
-      <div class="tiges-display-val" id="tiges-modal-val">0</div>
-      <div class="tiges-display-m"  id="tiges-modal-m">0.00 m</div>
+    <div class="modal-sub">Modifie la valeur courante (passes futures)</div>
+    <div class="tiges-compare">
+      <div class="tig-cell">
+        <div class="tig-cell-lbl">Actuel</div>
+        <div class="tig-cell-val" id="tiges-current-val">0</div>
+        <div class="tig-cell-m" id="tiges-current-m">0.00 m</div>
+      </div>
+      <div class="tig-arrow">→</div>
+      <div class="tig-cell tig-cell-new">
+        <div class="tig-cell-lbl">Nouveau</div>
+        <div class="tig-cell-val" id="tiges-modal-val">0</div>
+        <div class="tig-cell-m" id="tiges-modal-m">0.00 m</div>
+      </div>
     </div>
+    <div class="tig-delta" id="tiges-delta">&nbsp;</div>
     <div class="tiges-big-grid">
-      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-1)">−1 tige<span class="tbtn-big-sub">−1.0 m</span></button>
-      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(1)">+1 tige<span class="tbtn-big-sub">+1.0 m</span></button>
-      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-0.5)">−½ tige<span class="tbtn-big-sub">−0.5 m</span></button>
-      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(0.5)">+½ tige<span class="tbtn-big-sub">+0.5 m</span></button>
+      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-1)">−1 tige<span class="tbtn-big-sub" id="tig-sub-m1">−0.5 m</span></button>
+      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(1)">+1 tige<span class="tbtn-big-sub" id="tig-sub-p1">+0.5 m</span></button>
+      <button class="tbtn-big tbtn-big-m" onclick="adjustTigesModal(-2)">−2 tiges<span class="tbtn-big-sub" id="tig-sub-m2">−1.0 m</span></button>
+      <button class="tbtn-big tbtn-big-p" onclick="adjustTigesModal(2)">+2 tiges<span class="tbtn-big-sub" id="tig-sub-p2">+1.0 m</span></button>
     </div>
     <div class="modal-btns-2">
       <button class="mbtn mbtn-cancel" onclick="closeTigesModalDirect()">Annuler</button>
@@ -385,11 +449,12 @@
 <script>
 // ══ STATE ══════════════════════════════════════════════════════════════
 let S = {
-  passes: [], coups: 0, tiges: 1, gps: null,
+  passes: [], coups: 0, tiges: 2, gps: null, niveauEau: null,
+  observations: '', photos: [],
   cfg: {
     chantier:'', sondage:'SP1', operateur:'', date:today(),
     profMax:800, refusSeuil:50,
-    M:10, h:0.54, Mg:5.21, Mt:0.59, Mp:0.06, A:4, Lt:1
+    M:10, h:0.54, Mg:5.21, Mt:0.59, Mp:0.06, A:4, Lt:0.5
   }
 };
 let sortDesc   = false;
@@ -402,8 +467,11 @@ function today() { return new Date().toISOString().slice(0,10); }
 function load() {
   try { const s = localStorage.getItem('pdl_v5'); if (s) S = JSON.parse(s); } catch(e) {}
   if (!S.gps)    S.gps    = null;
-  if (!S.tiges)  S.tiges  = 1;
-  if (!S.cfg.Lt) S.cfg.Lt = 1;
+  if (S.niveauEau===undefined) S.niveauEau = null;
+  if (!S.tiges)  S.tiges  = 2;
+  if (!S.cfg.Lt) S.cfg.Lt = 0.5;
+  if (S.observations===undefined) S.observations = '';
+  if (!Array.isArray(S.photos))   S.photos = [];
   syncFields(); render();
 }
 
@@ -416,7 +484,7 @@ function save() {
 }
 
 // ══ HELPERS ═══════════════════════════════════════════════════════════
-function tigesM(n) { return (n * (S.cfg.Lt || 1)).toFixed(2); }
+function tigesM(n) { return (n * (S.cfg.Lt || 0.5)).toFixed(2); }
 function depth()   { return S.passes.length * 10; }
 
 // ══ qd FORMULA ════════════════════════════════════════════════════════
@@ -445,11 +513,16 @@ function setCoupManual() {
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() });
-  // Auto-suggest tige every metre
-  if (S.passes.length % 10 === 0) {
-    if (confirm('Profondeur : ' + (S.passes.length/10) + ' m\nAjouter 1 tige ?')) S.tiges += 1;
-  }
   S.coups = 0; save(); render();
+  // Auto-prompt : ouvrir le modal tiges quand depth atteint (n_tiges × Lt) − 0.1 m
+  const Lt = S.cfg.Lt || 0.5;
+  const thresholdCm = Math.round(S.tiges * Lt * 100 - 10);
+  if (thresholdCm > 0 && depth() >= thresholdCm && (depth() - 10) < thresholdCm) {
+    if (confirm('Profondeur : ' + (depth()/100).toFixed(2) + ' m atteinte.\n\n' +
+                'Modifier les tiges ?')) {
+      openTigesModal();
+    }
+  }
 }
 
 function marquerRefus() {
@@ -461,6 +534,9 @@ function marquerRefus() {
 // ══ TIGES MODAL (depuis bloc tiges en saisie) ══════════════════════════
 function openTigesModal() {
   tigesModalTemp = S.tiges;
+  // Set "Actuel" reference values (fixed during editing)
+  const cv = document.getElementById('tiges-current-val'); if (cv) cv.textContent = S.tiges;
+  const cm = document.getElementById('tiges-current-m');   if (cm) cm.textContent = tigesM(S.tiges) + ' m';
   updateTigesModalUI();
   document.getElementById('tiges-modal').classList.remove('hidden');
 }
@@ -471,6 +547,26 @@ function adjustTigesModal(delta) {
 function updateTigesModalUI() {
   document.getElementById('tiges-modal-val').textContent = tigesModalTemp;
   document.getElementById('tiges-modal-m').textContent   = tigesM(tigesModalTemp) + ' m';
+  // Delta indicator
+  const delta = tigesModalTemp - S.tiges;
+  const Lt = S.cfg.Lt || 0.5;
+  const deltaEl = document.getElementById('tiges-delta');
+  if (deltaEl) {
+    deltaEl.classList.remove('up','down');
+    if (delta === 0) {
+      deltaEl.innerHTML = '&nbsp;';
+    } else {
+      const sign = delta > 0 ? '+' : '−';
+      const plural = Math.abs(delta) > 1 ? 's' : '';
+      deltaEl.textContent = sign + Math.abs(delta) + ' tige' + plural + '  ·  ' + sign + Math.abs(delta * Lt).toFixed(2) + ' m';
+      deltaEl.classList.add(delta > 0 ? 'up' : 'down');
+    }
+  }
+  const fm = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' m';
+  const m1 = document.getElementById('tig-sub-m1'); if (m1) m1.textContent = fm(-Lt);
+  const p1 = document.getElementById('tig-sub-p1'); if (p1) p1.textContent = fm(Lt);
+  const m2 = document.getElementById('tig-sub-m2'); if (m2) m2.textContent = fm(-2*Lt);
+  const p2 = document.getElementById('tig-sub-p2'); if (p2) p2.textContent = fm(2*Lt);
 }
 function saveTigesModal() {
   S.tiges = tigesModalTemp; save(); render(); closeTigesModalDirect();
@@ -489,6 +585,8 @@ function openEditModal(idx) {
     'Profondeur : ' + p.d0 + '–' + p.d1 + ' cm' + (qd ? '  ·  qd = ' + qd.toFixed(3) + ' MPa' : '');
   document.getElementById('modal-coups').value  = p.c;
   document.getElementById('modal-refus').checked = p.r;
+  const noteEl = document.getElementById('modal-note');
+  if (noteEl) noteEl.value = p.note || '';
 
   // How many passes will be affected
   const affected = S.passes.length - idx;
@@ -514,9 +612,11 @@ function saveRow() {
   const n = parseInt(document.getElementById('modal-coups').value);
   if (isNaN(n) || n < 0) { alert('Valeur invalide.'); return; }
 
-  // Update coups + refus for this pass
+  // Update coups + refus + note for this pass
   S.passes[editIdx].c = n;
   S.passes[editIdx].r = document.getElementById('modal-refus').checked;
+  const noteVal = document.getElementById('modal-note');
+  S.passes[editIdx].note = noteVal ? (noteVal.value || '').trim() : '';
 
   // Propagate tiges change from editIdx onwards
   const oldTiges = S.passes[editIdx].n;
@@ -558,6 +658,106 @@ function toggleSort() {
   render();
 }
 
+// ══ NIVEAU EAU ════════════════════════════════════════════════════════
+function saveEau(val) {
+  const v = parseFloat(val);
+  S.niveauEau = (!isNaN(v) && v >= 0) ? v : null;
+  save();
+}
+
+// ══ OBSERVATIONS ══════════════════════════════════════════════════════
+function saveObservations(text) {
+  S.observations = (text || '').trim();
+  save();
+}
+
+// ══ PHOTOS ════════════════════════════════════════════════════════════
+function compressImage(file, maxW, quality) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const ratio = Math.min(1, maxW / img.width);
+        const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
+        const cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('Image illisible'));
+      img.src = ev.target.result;
+    };
+    fr.onerror = () => reject(new Error('Lecture fichier échouée'));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function addPhotos(fileList) {
+  if (!fileList || !fileList.length) return;
+  for (const f of fileList) {
+    if (!f.type || !f.type.startsWith('image/')) continue;
+    try {
+      const dataUrl = await compressImage(f, 1280, 0.7);
+      if (!S.photos) S.photos = [];
+      S.photos.push({
+        id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+        dataUrl: dataUrl,
+        caption: '',
+        ts: new Date().toISOString()
+      });
+      try { save(); } catch(e) {
+        S.photos.pop();
+        alert('Espace de stockage saturé. Photo non ajoutée.\nSupprimez quelques photos avant d\'en ajouter.');
+        break;
+      }
+    } catch(e) {
+      alert('Erreur lors de l\'ajout de la photo : ' + e.message);
+    }
+  }
+  document.getElementById('photo-input').value = '';
+  renderPhotos();
+}
+
+function deletePhoto(id) {
+  if (!confirm('Supprimer cette photo ?')) return;
+  S.photos = (S.photos || []).filter(p => p.id !== id);
+  save(); renderPhotos();
+}
+
+function setPhotoCaption(id, caption) {
+  const p = (S.photos || []).find(p => p.id === id);
+  if (p) { p.caption = (caption || '').trim(); save(); }
+}
+
+function viewPhoto(id) {
+  const p = (S.photos || []).find(p => p.id === id);
+  if (!p) return;
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write(
+    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Photo PDL</title></head>' +
+    '<body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;">' +
+    '<img src="' + p.dataUrl + '" style="max-width:100%;max-height:100vh;display:block;">' +
+    '</body></html>'
+  );
+}
+
+function renderPhotos() {
+  const grid = document.getElementById('photos-grid');
+  if (!grid) return;
+  const photos = S.photos || [];
+  if (!photos.length) { grid.innerHTML = ''; return; }
+  grid.innerHTML = photos.map(p => {
+    const cap = (p.caption || '').replace(/"/g, '&quot;');
+    return '<div class="photo-item">' +
+      '<img src="' + p.dataUrl + '" onclick="viewPhoto(\'' + p.id + '\')" alt="">' +
+      '<button class="photo-del" onclick="deletePhoto(\'' + p.id + '\')">✕</button>' +
+      '<input type="text" class="photo-caption" placeholder="Légende…" value="' + cap + '" onchange="setPhotoCaption(\'' + p.id + '\', this.value)">' +
+      '</div>';
+  }).join('');
+}
+
 // ══ GPS ═══════════════════════════════════════════════════════════════
 function captureGPS() {
   const dot=document.getElementById('gps-dot'), co=document.getElementById('gps-coords'), me=document.getElementById('gps-meta');
@@ -577,21 +777,33 @@ function renderGPS() {
   if (S.gps) {
     dot.className='gps-dot ok';
     co.textContent=S.gps.lat.toFixed(6)+', '+S.gps.lon.toFixed(6);
-    me.textContent='± '+S.gps.acc+' m · '+new Date(S.gps.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    me.textContent=S.gps.acc===0?'':'± '+S.gps.acc+' m · '+new Date(S.gps.ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
     if(typeof L!=='undefined') initMap(S.gps.lat, S.gps.lon);
-  } else { dot.className='gps-dot'; co.textContent='—'; me.textContent='Non enregistrée'; resetMap && resetMap(); }
+  } else { dot.className='gps-dot'; co.textContent=''; me.textContent=''; resetMap && resetMap(); }
 }
 
 // ══ EXPORT ════════════════════════════════════════════════════════════
 function exportCSV() {
   if (!S.passes.length) { alert('Aucune donnée à exporter.'); return; }
   const c = S.cfg;
+  const csvField = (s) => {
+    const v = (s == null ? '' : String(s)).replace(/\r?\n/g, ' ');
+    return /[",;\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  };
+  const photoCount = (S.photos || []).length;
+  const obs = (S.observations || '').replace(/\r?\n/g, ' / ');
   const lines = [
     '# PDL — '+(c.chantier||'Chantier')+' — '+c.sondage+' — '+c.date+' — '+(c.operateur||''),
     S.gps?'# GPS — Lat:'+S.gps.lat+' Lon:'+S.gps.lon+' ±'+S.gps.acc+'m':'# GPS — Non enregistrée',
     '# Params: M='+c.M+'kg h='+c.h+'m Mg='+c.Mg+' Mt='+c.Mt+' Mp='+c.Mp+' A='+c.A+'cm²',
-    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Refus,Timestamp',
-    ...S.passes.map(p=>{const qd=calcQd(p.c,p.n);return p.d0+','+p.d1+','+p.c+','+p.n+','+(qd!==null?qd.toFixed(3):'NA')+','+(p.r?'OUI':'NON')+','+p.t;})
+    S.niveauEau!==null ? '# Niveau eau : '+S.niveauEau+' m' : '# Niveau eau : non rencontré',
+    '# Observations : ' + (obs || '(aucune)'),
+    '# Photos : ' + photoCount + ' jointe(s)',
+    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Refus,Note,Timestamp',
+    ...S.passes.map(p=>{
+      const qd=calcQd(p.c,p.n);
+      return [p.d0,p.d1,p.c,p.n,(qd!==null?qd.toFixed(3):'NA'),(p.r?'OUI':'NON'),csvField(p.note||''),p.t].join(',');
+    })
   ];
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob);
@@ -602,11 +814,40 @@ function exportCSV() {
 
 // ══ CONFIG ════════════════════════════════════════════════════════════
 function nouveauSondage() {
-  if (!confirm('Démarrer un nouveau sondage ?\nExportez le CSV si nécessaire.')) return;
-  const cur=S.cfg.sondage||'SP1', num=parseInt(cur.replace(/\D/g,'')||'1'), pfx=cur.replace(/\d+/g,'');
-  const nom=prompt('Numéro du nouveau sondage :', pfx+(num+1));
-  if (nom===null) return;
-  S.passes=[]; S.coups=0; S.tiges=1; S.gps=null; S.cfg.sondage=nom||pfx+(num+1); if(typeof resetMap!=='undefined') resetMap();
+  const hasData = S.passes.length > 0 || S.gps || S.niveauEau !== null;
+
+  if (hasData) {
+    const summary = 'Sondage actuel : ' + (S.cfg.sondage || 'SP1') + '\n' +
+                    'Passes : ' + S.passes.length + '  ·  Profondeur : ' + (depth()/100).toFixed(2) + ' m';
+    const shouldExport = confirm(
+      summary + '\n\n' +
+      'Voulez-vous EXPORTER le CSV avant de continuer ?\n\n' +
+      '• OK = Exporter le CSV maintenant\n' +
+      '• Annuler = Continuer sans exporter'
+    );
+    if (shouldExport) {
+      try { exportCSV(); } catch(e) {}
+    }
+    if (!confirm(
+      '⚠ ATTENTION — Les données du sondage actuel vont être SUPPRIMÉES.\n\n' +
+      '(passes, GPS, niveau d\'eau, observations, photos)\n\n' +
+      'Confirmer la création d\'un nouveau sondage ?'
+    )) return;
+  } else {
+    if (!confirm('Démarrer un nouveau sondage ?')) return;
+  }
+
+  const cur = S.cfg.sondage || 'SP1';
+  const num = parseInt(cur.replace(/\D/g,'') || '1');
+  const pfx = cur.replace(/\d+/g,'') || 'SP';
+  const nom = prompt('Numéro du nouveau sondage :', pfx + (num + 1));
+  if (nom === null) return;
+
+  S.passes = []; S.coups = 0; S.tiges = 2;
+  S.gps = null; S.niveauEau = null;
+  S.observations = ''; S.photos = [];
+  S.cfg.sondage = nom || pfx + (num + 1);
+  if (typeof resetMap !== 'undefined') resetMap();
   save(); syncFields(); render();
 }
 
@@ -623,7 +864,7 @@ function saveConfig() {
   S.cfg.Mt=parseFloat(document.getElementById('cfg-Mt').value)||0.59;
   S.cfg.Mp=parseFloat(document.getElementById('cfg-Mp').value)||0.06;
   S.cfg.A =parseFloat(document.getElementById('cfg-A').value)||4;
-  S.cfg.Lt=parseFloat(document.getElementById('cfg-Lt').value)||1;
+  S.cfg.Lt=parseFloat(document.getElementById('cfg-Lt').value)||0.5;
   save(); render(); showTab('saisie');
 }
 
@@ -640,11 +881,12 @@ function buildTable(passes, showQd) {
   let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th>qd MPa</th>':'')+'<th>Tiges</th></tr>';
   passes.forEach(p => {
     const ri=S.passes.indexOf(p), qd=calcQd(p.c,p.n);
-    h+=`<tr class="data-row${p.r?' refus-row':''}" onclick="openEditModal(${ri})">
-      <td>${p.d0}–${p.d1}</td>
-      <td>${badge(p.c,p.r)}</td>
-      ${showQd?`<td>${(!p.r&&qd!==null)?qd.toFixed(2):'—'}</td>`:''}
-      <td>${p.n}</td></tr>`;
+    const noteIcon = (p.note && p.note.length) ? '<span class="note-icon" title="Note">📝</span>' : '';
+    h+='<tr class="data-row'+(p.r?' refus-row':'')+'" onclick="openEditModal('+ri+')">'+
+      '<td>'+p.d0+'–'+p.d1+noteIcon+'</td>'+
+      '<td>'+badge(p.c,p.r)+'</td>'+
+      (showQd?'<td>'+((!p.r&&qd!==null)?qd.toFixed(2):'—')+'</td>':'')+
+      '<td>'+p.n+'</td></tr>';
   });
   return h + '</table>';
 }
@@ -653,25 +895,30 @@ function render() {
   const d=depth(), ln=S.passes.length+1;
   document.getElementById('topbar-title').textContent=(S.cfg.chantier?S.cfg.chantier+' · ':'')+S.cfg.sondage;
   document.getElementById('depth-val').textContent  =d;
+  document.getElementById('depth-unit').textContent ='cm (' + (d/100).toFixed(2) + ' m)';
   document.getElementById('layer-label').textContent='Couche '+ln+' · '+d+'–'+(d+10)+' cm';
   document.getElementById('coup-val').textContent   =S.coups;
   document.getElementById('tiges-val').textContent  =S.tiges;
   document.getElementById('tiges-m').textContent    =tigesM(S.tiges)+' m';
 
-  // Both tables show same data, same sort
   const ordered = sortDesc ? [...S.passes].reverse() : [...S.passes];
   document.getElementById('table-saisie').innerHTML  = buildTable(ordered, true);
   document.getElementById('table-donnees').innerHTML = buildTable(ordered, true);
 
-  // Stats
-  const total=S.passes.reduce((a,p)=>a+p.c,0), refN=S.passes.filter(p=>p.r).length;
   const sc=document.getElementById('stats-card'), sr=document.getElementById('stats-row');
   if (S.passes.length) {
     sc.style.display='';
-    sr.innerHTML=stat(S.passes.length,'passes')+stat(d+' cm','profondeur')+stat(total,'coups total')+(refN?stat(refN,'refus'):'');
+    const profM = (d/100).toFixed(2) + ' m';
+    const eauStr = (S.niveauEau!==null && S.niveauEau!==undefined) ? S.niveauEau + ' m' : '—';
+    sr.innerHTML=stat(profM,'profondeur')+stat(eauStr,"niveau d'eau");
   } else sc.style.display='none';
 
   renderGPS();
+  const eauInput = document.getElementById('eau-input');
+  if (eauInput) eauInput.value = S.niveauEau !== null ? S.niveauEau : '';
+  const obsEl = document.getElementById('obs-input');
+  if (obsEl && obsEl.value !== (S.observations || '')) obsEl.value = S.observations || '';
+  renderPhotos();
 }
 
 function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div><div class="stat-lbl">'+l+'</div></div>';}
@@ -690,33 +937,29 @@ function syncFields(){
   document.getElementById('cfg-Mt').value=c.Mt||0.59;
   document.getElementById('cfg-Mp').value=c.Mp||0.06;
   document.getElementById('cfg-A').value =c.A||4;
-  document.getElementById('cfg-Lt').value=c.Lt||1;
+  document.getElementById('cfg-Lt').value=c.Lt||0.5;
 }
 
-// ══ GRAPHIQUE (log scale X, no fill) ═════════════════════════════════
+// ══ GRAPHIQUE ═════════════════════════════════════════════════════════
 function renderChart() {
   const wrap=document.getElementById('chart-wrap');
   const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
   if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
-
   const minQd=Math.max(0.01,Math.min(...pts.map(x=>x.qd))*0.5);
   const maxQd=Math.max(...pts.map(x=>x.qd))*2;
   const minD=Math.min(...pts.map(x=>x.d)), totalD=Math.abs(minD)||1;
   const PL=55,PR=16,PT=20,PB=28,W=320,chartW=W-PL-PR;
   const chartH=Math.max(180,pts.length*20), H=chartH+PT+PB;
-
   const logMin=Math.log10(minQd), logMax=Math.log10(maxQd), logRange=logMax-logMin||1;
   const xS=v=>PL+(Math.log10(Math.max(v,minQd))-logMin)/logRange*chartW;
   const yS=d=>PT+((0-d)/totalD)*chartH;
-
   let path='',dots='',lbls='';
   pts.forEach((x,i)=>{
     const px=xS(x.qd).toFixed(1),py=yS(x.d).toFixed(1);
     path+=(i===0?'M':'L')+px+','+py+' ';
-    dots+=`<circle cx="${px}" cy="${py}" r="3.5" fill="#185FA5"/>`;
-    lbls+=`<text x="${(parseFloat(px)+6).toFixed(1)}" y="${(parseFloat(py)+4).toFixed(1)}" font-size="8" fill="#185FA5">${x.qd.toFixed(2)}</text>`;
+    dots+='<circle cx="'+px+'" cy="'+py+'" r="3.5" fill="#185FA5"/>';
+    lbls+='<text x="'+(parseFloat(px)+6).toFixed(1)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" font-size="8" fill="#1A1714">'+x.qd.toFixed(2)+'</text>';
   });
-
   let xG='',xL='';
   const logTicks=[];
   for(let exp=Math.floor(logMin);exp<=Math.ceil(logMax);exp++){
@@ -727,29 +970,27 @@ function renderChart() {
   }
   [...new Set(logTicks)].sort((a,b)=>a-b).forEach(v=>{
     const x=xS(v).toFixed(1);
-    xG+=`<line x1="${x}" y1="${PT}" x2="${x}" y2="${PT+chartH}" stroke="#D6D2CA" stroke-width="0.5"/>`;
+    xG+='<line x1="'+x+'" y1="'+PT+'" x2="'+x+'" y2="'+(PT+chartH)+'" stroke="#D6D2CA" stroke-width="0.5"/>';
     const lbl=v>=1?v.toFixed(v<10?1:0):v.toFixed(2);
-    xL+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="#6B6560">${lbl}</text>`;
+    xL+='<text x="'+x+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="#6B6560">'+lbl+'</text>';
   });
-
   let yG='',yL='';
   pts.forEach(x=>{
     const py=yS(x.d).toFixed(1);
-    yG+=`<line x1="${PL}" y1="${py}" x2="${PL+chartW}" y2="${py}" stroke="#EAE8E4" stroke-width="0.5"/>`;
-    yL+=`<text x="${PL-4}" y="${(parseFloat(py)+4).toFixed(1)}" text-anchor="end" font-size="9" fill="#6B6560">${x.d.toFixed(1)}</text>`;
+    yG+='<line x1="'+PL+'" y1="'+py+'" x2="'+(PL+chartW)+'" y2="'+py+'" stroke="#EAE8E4" stroke-width="0.5"/>';
+    yL+='<text x="'+(PL-4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#6B6560">'+x.d.toFixed(1)+'</text>';
   });
-
-  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-    ${xG}${yG}
-    <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
-    <line x1="${PL}" y1="${PT+chartH}" x2="${PL+chartW}" y2="${PT+chartH}" stroke="#9A9590" stroke-width="1"/>
-    <path d="${path}" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}${lbls}${yL}${xL}
-    <text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa] — échelle log</text>
-    <text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>
-  </svg>`;
+  wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+
+    xG+yG+
+    '<line x1="'+PL+'" y1="'+PT+'" x2="'+PL+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
+    '<line x1="'+PL+'" y1="'+(PT+chartH)+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
+    '<path d="'+path+'" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+    dots+lbls+yL+xL+
+    '<text x="'+(PL+chartW/2)+'" y="'+H+'" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa] — échelle log</text>'+
+    '<text transform="rotate(-90)" x="'+(-(PT+chartH/2))+'" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>'+
+    '</svg>';
   const c=S.cfg;
-  document.getElementById('params-summary').innerHTML=`M=${c.M}kg · h=${c.h}m · A=${c.A}cm²<br>Mg=${c.Mg}kg · Mt=${c.Mt}kg · Mp=${c.Mp}kg<br><span style="font-size:11px;">qd=(M·g·h)/(A·e/N)·M/(M+Mg+Mp+n·Mt)/10⁶ &nbsp;·&nbsp; e=enfoncement par passe=0,10 m &nbsp;·&nbsp; A en m²=section/10 000</span>`;
+  document.getElementById('params-summary').innerHTML='M='+c.M+'kg · h='+c.h+'m · A='+c.A+'cm²<br>Mg='+c.Mg+'kg · Mt='+c.Mt+'kg · Mp='+c.Mp+'kg<br><span style="font-size:11px;">qd=(M·g·h)/(A·e/N)·M/(M+Mg+Mp+n·Mt)/10⁶</span>';
 }
 
 // ══ TABS ══════════════════════════════════════════════════════════════
@@ -759,65 +1000,40 @@ function showTab(t){
   if(t==='graphique') renderChart();
 }
 
-
-// ══ MAP (Leaflet + IGN Géoportail) ════════════════════════════════════
+// ══ MAP ═══════════════════════════════════════════════════════════════
 let _map = null;
 let _marker = null;
-const IGN_KEY = '75942367-7f71-49c8-bf21-9116ecb2ac22';
-
 function initMap(lat, lon) {
   const mapEl = document.getElementById('map');
   const placeholder = document.getElementById('map-placeholder');
-
   placeholder.style.display = 'none';
   mapEl.style.display = 'block';
   const hint = document.getElementById('map-drag-hint');
   if (hint) hint.style.display = 'block';
-
-  if (_map) {
-    _map.setView([lat, lon], 18);
-    _marker.setLatLng([lat, lon]);
-    return;
-  }
-
+  if (_map) { _map.setView([lat, lon], 18); _marker.setLatLng([lat, lon]); return; }
   _map = L.map('map', { zoomControl: true, attributionControl: true }).setView([lat, lon], 18);
-
-  // IGN Orthophoto layer — nouvelle URL Géoplateforme (sans clé depuis 2024)
   L.tileLayer(
-    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-    '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
-    '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-    {
-      attribution: '© IGN Géoportail',
-      maxZoom: 19,
-      maxNativeZoom: 19,
-      tileSize: 256
-    }
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
   ).addTo(_map);
-
-  // Marker
   const icon = L.divIcon({
     html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
-    iconSize: [14, 14],
-    iconAnchor: [7, 7],
-    className: ''
+    iconSize: [14, 14], iconAnchor: [7, 7], className: ''
   });
   _marker = L.marker([lat, lon], { icon, draggable: true }).addTo(_map);
   _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
-
   _marker.on('dragend', function(e) {
     const pos = e.target.getLatLng();
     S.gps.lat = parseFloat(pos.lat.toFixed(6));
     S.gps.lon = parseFloat(pos.lng.toFixed(6));
     S.gps.acc = 0;
-    S.gps.ts  = new Date().toISOString();
+    S.gps.ts = new Date().toISOString();
     save();
-    _marker.setPopupContent('<b>Sondage</b> (ajusté)<br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
+    _marker.setPopupContent('<b>Sondage</b><br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
     document.getElementById('gps-coords').textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
-    document.getElementById('gps-meta').textContent = 'Position ajustée manuellement';
+    document.getElementById('gps-meta').textContent = '';
   });
 }
-
 function resetMap() {
   document.getElementById('map').style.display = 'none';
   document.getElementById('map-placeholder').style.display = 'flex';

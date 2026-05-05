@@ -1,7 +1,8 @@
-const CACHE = 'pdl-v1';
+const CACHE = 'pdl-v3';
 const FILES = [
   '/penetrometre-app/',
   '/penetrometre-app/index.html',
+  '/penetrometre-app/rapport.html',
   '/penetrometre-app/manifest.json'
 ];
 
