@@ -218,7 +218,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger</div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v7</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1114,7 +1114,68 @@ function resetMap() {
   if (_map) { _map.remove(); _map = null; _marker = null; }
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    // Check for updates on every page load and on focus
+    if (reg.update) reg.update();
+    window.addEventListener('focus', () => { try { reg.update(); } catch(e){} });
+    // When a new worker is found, install it and ask it to skip waiting
+    reg.addEventListener('updatefound', () => {
+      const newW = reg.installing;
+      if (newW) newW.addEventListener('statechange', () => {
+        if (newW.state === 'installed' && navigator.serviceWorker.controller) {
+          newW.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+  }).catch(()=>{});
+  // Auto-reload once when a new SW takes control
+  let _reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!_reloaded) { _reloaded = true; window.location.reload(); }
+  });
+  // Also listen to direct messages
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (e.data && e.data.type === 'SW_UPDATED' && !_reloaded) {
+      _reloaded = true; window.location.reload();
+    }
+  });
+}
+load();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</body>
+</html>
+s on every page load and on focus
+    if (reg.update) reg.update();
+    window.addEventListener('focus', () => { try { reg.update(); } catch(e){} });
+    reg.addEventListener('updatefound', () => {
+      const newW = reg.installing;
+      if (newW) newW.addEventListener('statechange', () => {
+        if (newW.state === 'installed' && navigator.serviceWorker.controller) {
+          newW.postMessage({ type: 'SKIP_WAITING' });
+        }
+      });
+    });
+  }).catch(()=>{});
+  let _reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!_reloaded) { _reloaded = true; window.location.reload(); }
+  });
+}
+load();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</body>
+</html>
+stener("message", e => {
+    if (e.data && e.data.type === "SW_UPDATED" && !_reloaded) { _reloaded = true; window.location.reload(); }
+  });
+}
+load();
+}
 load();
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
