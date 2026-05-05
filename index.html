@@ -193,6 +193,7 @@
 
   .empty { text-align:center; padding:24px; color:var(--text2); font-size:13px; }
   .hidden { display:none; }
+  .lc { text-transform:none !important; }
 
   /* OBSERVATIONS */
   .obs-textarea { width:100%; min-height:70px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; }
@@ -338,7 +339,7 @@
   <!-- ══ GRAPHIQUE ══ -->
   <div id="tab-graphique" class="hidden">
     <div class="card">
-      <div class="clabel">Résistance de pointe qd [MPa]</div>
+      <div class="clabel">Résistance de pointe <span class="lc">qd</span> [MPa]</div>
       <div class="chart-wrap" id="chart-wrap"><div class="empty">Aucune donnée</div></div>
     </div>
     <div class="card">
@@ -951,7 +952,7 @@ function badge(c,r) {
 
 function buildTable(passes, showQd) {
   if (!passes.length) return '<div class="empty">Aucune donnée</div>';
-  let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th>qd MPa</th>':'')+'<th>Tiges</th></tr>';
+  let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th><span class="lc">qd</span> MPa</th>':'')+'<th>Tiges</th></tr>';
   passes.forEach(p => {
     const ri=S.passes.indexOf(p), qd=calcQd(p.c,p.n);
     const noteIcon = (p.note && p.note.length) ? '<span class="note-icon" title="Note">📝</span>' : '';
@@ -983,7 +984,9 @@ function render() {
     sc.style.display='';
     const profM = (d/100).toFixed(2) + ' m';
     const eauStr = (S.niveauEau!==null && S.niveauEau!==undefined) ? S.niveauEau + ' m' : '—';
-    sr.innerHTML=stat(profM,'profondeur')+stat(eauStr,"niveau d'eau");
+    const lastP = S.passes[S.passes.length-1];
+    const arret = lastP.r ? 'Refus' : 'Arrêt op.';
+    sr.innerHTML=stat(profM,'profondeur')+stat(eauStr,"prof. eau")+stat(arret,"arrêt");
   } else sc.style.display='none';
 
   renderGPS();
@@ -1094,7 +1097,6 @@ function initMap(lat, lon) {
     iconSize: [14, 14], iconAnchor: [7, 7], className: ''
   });
   _marker = L.marker([lat, lon], { icon, draggable: true }).addTo(_map);
-  _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
   _marker.on('dragend', function(e) {
     const pos = e.target.getLatLng();
     S.gps.lat = parseFloat(pos.lat.toFixed(6));
@@ -1102,57 +1104,6 @@ function initMap(lat, lon) {
     S.gps.acc = 0;
     S.gps.ts = new Date().toISOString();
     save();
-    _marker.setPopupContent('<b>Sondage</b><br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
-    document.getElementById('gps-coords').textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
-    document.getElementById('gps-meta').textContent = '';
-  });
-}
-function resetMap() {
-  document.getElementById('map').style.display = 'none';
-  document.getElementById('map-placeholder').style.display = 'flex';
-  if (_map) { _map.remove(); _map = null; _marker = null; }
-}
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
-load();
-</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-</body>
-</html>
-ue') renderChart();
-}
-
-// ══ MAP ═══════════════════════════════════════════════════════════════
-let _map = null;
-let _marker = null;
-function initMap(lat, lon) {
-  const mapEl = document.getElementById('map');
-  const placeholder = document.getElementById('map-placeholder');
-  placeholder.style.display = 'none';
-  mapEl.style.display = 'block';
-  const hint = document.getElementById('map-drag-hint');
-  if (hint) hint.style.display = 'block';
-  if (_map) { _map.setView([lat, lon], 18); _marker.setLatLng([lat, lon]); return; }
-  _map = L.map('map', { zoomControl: true, attributionControl: true }).setView([lat, lon], 18);
-  L.tileLayer(
-    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-    { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
-  ).addTo(_map);
-  const icon = L.divIcon({
-    html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
-    iconSize: [14, 14], iconAnchor: [7, 7], className: ''
-  });
-  _marker = L.marker([lat, lon], { icon, draggable: true }).addTo(_map);
-  _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
-  _marker.on('dragend', function(e) {
-    const pos = e.target.getLatLng();
-    S.gps.lat = parseFloat(pos.lat.toFixed(6));
-    S.gps.lon = parseFloat(pos.lng.toFixed(6));
-    S.gps.acc = 0;
-    S.gps.ts = new Date().toISOString();
-    save();
-    _marker.setPopupContent('<b>Sondage</b><br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
     document.getElementById('gps-coords').textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
     document.getElementById('gps-meta').textContent = '';
   });
