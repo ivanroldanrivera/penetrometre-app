@@ -1,4 +1,4 @@
-const CACHE = 'pdl-v7';
+const CACHE = 'pdl-v10';
 const LOCAL = [
   '/penetrometre-app/',
   '/penetrometre-app/index.html',

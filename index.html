@@ -218,7 +218,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v7</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v10</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -284,21 +284,28 @@
   <!-- ══ DONNÉES ══ -->
   <div id="tab-donnees" class="hidden">
     <div class="gps-card">
-      <div class="clabel">Localisation &amp; nappe d'eau</div>
-      <div class="gps-row">
+      <div class="clabel">Repérage du site</div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:var(--text2);min-width:90px;">Niveau d'eau</span>
+        <input type="number" id="eau-input" placeholder="profondeur (m)" step="0.1" min="0"
+          style="flex:1;padding:7px 10px;font-size:13px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);"
+          onchange="saveEau(this.value)"/>
+        <span style="font-size:11px;color:var(--text2);">m</span>
+      </div>
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+        <span style="font-size:12px;color:var(--text2);min-width:90px;">Cote réf.</span>
+        <input type="number" id="cote-input" placeholder="ex. 100.50" step="0.01"
+          style="flex:1;padding:7px 10px;font-size:13px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);"
+          onchange="saveCote(this.value)"/>
+        <span style="font-size:11px;color:var(--text2);">m</span>
+      </div>
+      <div class="gps-row" style="margin-top:10px;">
         <div class="gps-dot" id="gps-dot"></div>
         <div class="gps-info">
           <div class="gps-coords" id="gps-coords"></div>
           <div class="gps-meta"   id="gps-meta"></div>
         </div>
         <button class="btn-gps" onclick="captureGPS()">📍 Capturer</button>
-      </div>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;">
-        <span style="font-size:12px;color:var(--text2);min-width:90px;">Niveau d'eau</span>
-        <input type="number" id="eau-input" placeholder="profondeur (m)" step="0.1" min="0"
-          style="flex:1;padding:7px 10px;font-size:13px;border:0.5px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);color:var(--text);"
-          onchange="saveEau(this.value)"/>
-        <span style="font-size:11px;color:var(--text2);">m</span>
       </div>
       <div id="map-placeholder" style="height:100px;display:flex;align-items:center;justify-content:center;color:#6B6560;font-size:13px;background:#ECEAE5;border-radius:9px;margin-top:12px;border:0.5px solid #D6D2CA;">📍 Capturez une position GPS pour afficher la carte</div>
       <div id="map" style="display:none;height:260px;width:100%;border-radius:9px;margin-top:12px;overflow:hidden;"></div>
@@ -370,8 +377,8 @@
     </div>
     <div class="card">
       <div class="clabel">Limites sondage</div>
-      <div class="irow"><label>Prof. max (cm)</label>  <input type="number" id="cfg-profmax" value="800" min="100" step="10"/></div>
-      <div class="irow"><label>Refus à (coups)</label> <input type="number" id="cfg-refus"   value="50"  min="5"   step="5"/></div>
+      <div class="irow"><label>Prof. max (cm)</label>     <input type="number" id="cfg-profmax" value="800" min="100" step="10"/></div>
+      <div class="irow"><label>Refus à (coups)</label>    <input type="number" id="cfg-refus"   value="50"  min="5"   step="5"/></div>
       <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
   </div>
@@ -450,7 +457,7 @@
 <script>
 // ══ STATE ══════════════════════════════════════════════════════════════
 let S = {
-  passes: [], coups: 0, tiges: 2, gps: null, niveauEau: null,
+  passes: [], coups: 0, tiges: 2, gps: null, niveauEau: null, cote: null,
   observations: '', photos: [],
   cfg: {
     chantier:'', sondage:'SP1', operateur:'', date:today(),
@@ -471,6 +478,7 @@ function load() {
   if (S.niveauEau===undefined) S.niveauEau = null;
   if (!S.tiges)  S.tiges  = 2;
   if (!S.cfg.Lt) S.cfg.Lt = 0.5;
+  if (S.cote === undefined) S.cote = null;
   if (S.observations===undefined) S.observations = '';
   if (!Array.isArray(S.photos))   S.photos = [];
   syncFields(); render();
@@ -663,6 +671,12 @@ function toggleSort() {
 function saveEau(val) {
   const v = parseFloat(val);
   S.niveauEau = (!isNaN(v) && v >= 0) ? v : null;
+  save();
+}
+
+function saveCote(val) {
+  const v = parseFloat(val);
+  S.cote = isNaN(v) ? null : v;
   save();
 }
 
@@ -918,7 +932,7 @@ function nouveauSondage() {
   if (nom === null) return;
 
   S.passes = []; S.coups = 0; S.tiges = 2;
-  S.gps = null; S.niveauEau = null;
+  S.gps = null; S.niveauEau = null; S.cote = null;
   S.observations = ''; S.photos = [];
   S.cfg.sondage = nom || pfx + (num + 1);
   if (typeof resetMap !== 'undefined') resetMap();
@@ -992,6 +1006,8 @@ function render() {
   renderGPS();
   const eauInput = document.getElementById('eau-input');
   if (eauInput) eauInput.value = S.niveauEau !== null ? S.niveauEau : '';
+  const coteInput = document.getElementById('cote-input');
+  if (coteInput) coteInput.value = (S.cote !== null && S.cote !== undefined) ? S.cote : '';
   const obsEl = document.getElementById('obs-input');
   if (obsEl && obsEl.value !== (S.observations || '')) obsEl.value = S.observations || '';
   renderPhotos();
@@ -1024,7 +1040,9 @@ function renderChart() {
   const minQd=Math.max(0.01,Math.min(...pts.map(x=>x.qd))*0.5);
   const maxQd=Math.max(...pts.map(x=>x.qd))*2;
   const minD=Math.min(...pts.map(x=>x.d)), totalD=Math.abs(minD)||1;
-  const PL=55,PR=16,PT=20,PB=28,W=320,chartW=W-PL-PR;
+  const cote = (S.cote !== null && S.cote !== undefined) ? parseFloat(S.cote) : NaN;
+  const showAlt = !isNaN(cote);
+  const PL=55,PR=showAlt?52:16,PT=20,PB=28,W=320,chartW=W-PL-PR;
   const chartH=Math.max(180,pts.length*20), H=chartH+PT+PB;
   const logMin=Math.log10(minQd), logMax=Math.log10(maxQd), logRange=logMax-logMin||1;
   const xS=v=>PL+(Math.log10(Math.max(v,minQd))-logMin)/logRange*chartW;
@@ -1050,18 +1068,27 @@ function renderChart() {
     const lbl=v>=1?v.toFixed(v<10?1:0):v.toFixed(2);
     xL+='<text x="'+x+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="#6B6560">'+lbl+'</text>';
   });
-  let yG='',yL='';
+  let yG='',yL='',yL2='';
   pts.forEach(x=>{
     const py=yS(x.d).toFixed(1);
     yG+='<line x1="'+PL+'" y1="'+py+'" x2="'+(PL+chartW)+'" y2="'+py+'" stroke="#EAE8E4" stroke-width="0.5"/>';
     yL+='<text x="'+(PL-4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#6B6560">'+x.d.toFixed(1)+'</text>';
+    if (showAlt) {
+      const alt = (cote + x.d).toFixed(2);
+      yL2+='<text x="'+(PL+chartW+4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="start" font-size="9" fill="#0F6E56">'+alt+'</text>';
+    }
   });
+  const rightAxis = showAlt
+    ? '<line x1="'+(PL+chartW)+'" y1="'+PT+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#0F6E56" stroke-width="1"/>'+
+      '<text transform="rotate(90,'+(W-4)+','+(PT+chartH/2)+')" x="'+(W-4)+'" y="'+(PT+chartH/2)+'" text-anchor="middle" font-size="9" fill="#0F6E56">Altitude [m]</text>'
+    : '';
   wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+
     xG+yG+
     '<line x1="'+PL+'" y1="'+PT+'" x2="'+PL+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
     '<line x1="'+PL+'" y1="'+(PT+chartH)+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
+    rightAxis+
     '<path d="'+path+'" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
-    dots+lbls+yL+xL+
+    dots+lbls+yL+yL2+xL+
     '<text x="'+(PL+chartW/2)+'" y="'+H+'" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa] — échelle log</text>'+
     '<text transform="rotate(-90)" x="'+(-(PT+chartH/2))+'" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>'+
     '</svg>';
@@ -1134,47 +1161,6 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!_reloaded) { _reloaded = true; window.location.reload(); }
   });
-  // Also listen to direct messages
-  navigator.serviceWorker.addEventListener('message', e => {
-    if (e.data && e.data.type === 'SW_UPDATED' && !_reloaded) {
-      _reloaded = true; window.location.reload();
-    }
-  });
-}
-load();
-</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-</body>
-</html>
-s on every page load and on focus
-    if (reg.update) reg.update();
-    window.addEventListener('focus', () => { try { reg.update(); } catch(e){} });
-    reg.addEventListener('updatefound', () => {
-      const newW = reg.installing;
-      if (newW) newW.addEventListener('statechange', () => {
-        if (newW.state === 'installed' && navigator.serviceWorker.controller) {
-          newW.postMessage({ type: 'SKIP_WAITING' });
-        }
-      });
-    });
-  }).catch(()=>{});
-  let _reloaded = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!_reloaded) { _reloaded = true; window.location.reload(); }
-  });
-}
-load();
-</script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-</body>
-</html>
-stener("message", e => {
-    if (e.data && e.data.type === "SW_UPDATED" && !_reloaded) { _reloaded = true; window.location.reload(); }
-  });
-}
-load();
 }
 load();
 </script>

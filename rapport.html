@@ -367,6 +367,7 @@ function calcQd(N, n, cfg) {
 
 // ── RENDER REPORT ─────────────────────────────────────────────────────
 function renderReport(S) {
+  window._S = S;
   const c = S.cfg, passes = S.passes || [];
 
   // Header
@@ -493,7 +494,9 @@ function renderChart(passes, cfg) {
   const minD  = Math.min(...pts.map(x=>x.d));
   const totalD = Math.abs(minD) || 1;
 
-  const PL=42, PR=12, PT=10, PB=22;
+  const cote = (window._S && window._S.cote !== null && window._S.cote !== undefined) ? parseFloat(window._S.cote) : NaN;
+  const showAlt = !isNaN(cote);
+  const PL=42, PR=showAlt?42:12, PT=10, PB=22;
   const W=340, chartW=W-PL-PR;
   const chartH = Math.max(160, pts.length * 14);
   const H = chartH + PT + PB;
@@ -526,21 +529,30 @@ function renderChart(passes, cfg) {
     xL+=`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="6.5" fill="#8A8580">${lbl}</text>`;
   });
 
-  let yG='', yL='';
+  let yG='', yL='', yL2='';
   pts.forEach(x=>{
     const py=yS(x.d).toFixed(1);
     yG+=`<line x1="${PL}" y1="${py}" x2="${W-PR}" y2="${py}" stroke="#E8E4DE" stroke-width="0.5" stroke-dasharray="2,2"/>`;
     yL+=`<text x="${PL-3}" y="${(parseFloat(py)+3).toFixed(1)}" text-anchor="end" font-size="7" fill="#8A8580">${x.d.toFixed(2)}</text>`;
+    if (showAlt) {
+      const alt = (cote + x.d).toFixed(2);
+      yL2+=`<text x="${(W-PR+3)}" y="${(parseFloat(py)+3).toFixed(1)}" text-anchor="start" font-size="7" fill="#0F6E56">${alt}</text>`;
+    }
   });
+  const rightAxis = showAlt
+    ? `<line x1="${W-PR}" y1="${PT}" x2="${W-PR}" y2="${PT+chartH}" stroke="#0F6E56" stroke-width="0.8"/>`+
+      `<text transform="rotate(90,${W-4},${PT+chartH/2})" x="${W-4}" y="${PT+chartH/2}" text-anchor="middle" font-size="7" fill="#0F6E56">Altitude [m]</text>`
+    : '';
 
   wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg">
     <rect width="${W}" height="${H}" fill="#FDFCFA"/>
     ${xG}${yG}
     <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${PT+chartH}" stroke="#4A4540" stroke-width="0.8"/>
     <line x1="${PL}" y1="${PT+chartH}" x2="${W-PR}" y2="${PT+chartH}" stroke="#4A4540" stroke-width="0.8"/>
+    ${rightAxis}
     <path d="${path}" fill="none" stroke="#185FA5" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}${qlbls}${yL}${xL}
-    <text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="7" fill="#8A8580">qd [MPa] — échelle logarithmique</text>
+    ${dots}${qlbls}${yL}${yL2}${xL}
+    <text x="${PL+chartW/2}" y="${H}" text-anchor="middle" font-size="7" fill="#8A8580"><tspan class="lc">qd</tspan> [MPa] — échelle logarithmique</text>
     <text transform="rotate(-90)" x="${-(PT+chartH/2)}" y="10" text-anchor="middle" font-size="7" fill="#8A8580">Profondeur [m]</text>
   </svg>`;
 }
@@ -612,6 +624,36 @@ loadFromStorage();
 </body>
 </html>
 );
+</script>
+</body>
+</html>
+er = L.marker([gps.lat, gps.lon], {icon, draggable: true}).addTo(_rmap);
+
+    marker.on('dragend', function(e) {
+      const pos = e.target.getLatLng();
+      const lat = parseFloat(pos.lat.toFixed(6));
+      const lon = parseFloat(pos.lng.toFixed(6));
+      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
+      try {
+        const raw = localStorage.getItem('pdl_v5');
+        if (raw) {
+          const S = JSON.parse(raw);
+          S.gps.lat = lat; S.gps.lon = lon; S.gps.acc = 0;
+          localStorage.setItem('pdl_v5', JSON.stringify(S));
+        }
+      } catch(e) {}
+    });
+  }, 100);
+}
+html>
+;
+        }
+      } catch(e) {}
+    });
+  }, 100);
+}
+
+loadFromStorage();
 </script>
 </body>
 </html>
