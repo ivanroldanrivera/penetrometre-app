@@ -304,7 +304,7 @@
       <div id="map-drag-hint" style="display:none;font-size:10px;color:#6B6560;text-align:center;margin-top:5px;">☝ Faites glisser le marqueur pour ajuster la position</div>
     </div>
     <div class="data-btns">
-      <button class="btn-blue" onclick="exportCSV()">⬇ Exporter CSV</button>
+      <button class="btn-blue" onclick="exportData()">⬇ Exporter Excel</button>
       <button class="btn-red"  onclick="nouveauSondage()">🗑 Nouveau sondage</button>
     </div>
     <div style="margin-bottom:8px;">
@@ -783,6 +783,79 @@ function renderGPS() {
 }
 
 // ══ EXPORT ════════════════════════════════════════════════════════════
+function exportData() {
+  if (typeof XLSX !== 'undefined' && XLSX.utils && XLSX.writeFile) {
+    try { exportXLSX(); return; } catch(e) { console.warn('XLSX failed', e); }
+  }
+  alert("La bibliothèque Excel n'est pas chargée (vous êtes peut-être hors-ligne).\nExport CSV à la place.");
+  exportCSV();
+}
+
+function exportXLSX() {
+  if (!S.passes.length) { alert('Aucune donnée à exporter.'); return; }
+  const c = S.cfg;
+  const photoCount = (S.photos || []).length;
+
+  // Sheet 1 : Info
+  const info = [
+    ['PDL — Pénétromètre Dynamique Léger'],
+    [],
+    ['Chantier', c.chantier || '—'],
+    ['Sondage',  c.sondage  || '—'],
+    ['Opérateur',c.operateur|| '—'],
+    ['Date',     c.date     || '—'],
+    [],
+    ['Profondeur atteinte (m)', +(depth()/100).toFixed(2)],
+    ['Niveau d\'eau (m)', S.niveauEau !== null ? S.niveauEau : 'Non rencontré'],
+    [],
+    ['GPS Latitude',  S.gps ? S.gps.lat : '—'],
+    ['GPS Longitude', S.gps ? S.gps.lon : '—'],
+    ['GPS Précision (m)', S.gps ? S.gps.acc : '—'],
+    [],
+    ['Paramètres pénétromètre'],
+    ['Masse tombante M (kg)',     c.M],
+    ['Hauteur chute h (m)',        c.h],
+    ['Masse guide+enclume Mg (kg)',c.Mg],
+    ['Masse tige Mt (kg)',         c.Mt],
+    ['Masse pointe Mp (kg)',       c.Mp],
+    ['Section pointe A (cm²)',     c.A],
+    ['Longueur tige Lt (m)',       c.Lt],
+    [],
+    ['Observations'],
+    [S.observations || '(aucune)'],
+    [],
+    ['Photos jointes', photoCount]
+  ];
+
+  // Sheet 2 : Données
+  const headers = ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)','Refus','Note','Timestamp'];
+  const data = [headers];
+  S.passes.forEach(p => {
+    const qd = calcQd(p.c, p.n);
+    data.push([
+      +(p.d0/100).toFixed(2),
+      +(p.d1/100).toFixed(2),
+      p.c,
+      p.n,
+      qd !== null ? +qd.toFixed(3) : 'NA',
+      p.r ? 'OUI' : 'NON',
+      p.note || '',
+      p.t
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const wsInfo = XLSX.utils.aoa_to_sheet(info);
+  wsInfo['!cols'] = [{wch:30},{wch:40}];
+  const wsData = XLSX.utils.aoa_to_sheet(data);
+  wsData['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},{wch:8},{wch:30},{wch:22}];
+  XLSX.utils.book_append_sheet(wb, wsInfo, 'Info');
+  XLSX.utils.book_append_sheet(wb, wsData, 'Données');
+
+  const filename = (c.sondage || 'PDL') + '_' + (c.date || new Date().toISOString().slice(0,10)) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+}
+
 function exportCSV() {
   if (!S.passes.length) { alert('Aucune donnée à exporter.'); return; }
   const c = S.cfg;
@@ -1044,5 +1117,56 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 load();
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</body>
+</html>
+ue') renderChart();
+}
+
+// ══ MAP ═══════════════════════════════════════════════════════════════
+let _map = null;
+let _marker = null;
+function initMap(lat, lon) {
+  const mapEl = document.getElementById('map');
+  const placeholder = document.getElementById('map-placeholder');
+  placeholder.style.display = 'none';
+  mapEl.style.display = 'block';
+  const hint = document.getElementById('map-drag-hint');
+  if (hint) hint.style.display = 'block';
+  if (_map) { _map.setView([lat, lon], 18); _marker.setLatLng([lat, lon]); return; }
+  _map = L.map('map', { zoomControl: true, attributionControl: true }).setView([lat, lon], 18);
+  L.tileLayer(
+    'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+    { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
+  ).addTo(_map);
+  const icon = L.divIcon({
+    html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
+    iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+  });
+  _marker = L.marker([lat, lon], { icon, draggable: true }).addTo(_map);
+  _marker.bindPopup('<b>Sondage</b><br>' + lat.toFixed(6) + ', ' + lon.toFixed(6)).openPopup();
+  _marker.on('dragend', function(e) {
+    const pos = e.target.getLatLng();
+    S.gps.lat = parseFloat(pos.lat.toFixed(6));
+    S.gps.lon = parseFloat(pos.lng.toFixed(6));
+    S.gps.acc = 0;
+    S.gps.ts = new Date().toISOString();
+    save();
+    _marker.setPopupContent('<b>Sondage</b><br>' + S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6)).openPopup();
+    document.getElementById('gps-coords').textContent = S.gps.lat.toFixed(6) + ', ' + S.gps.lon.toFixed(6);
+    document.getElementById('gps-meta').textContent = '';
+  });
+}
+function resetMap() {
+  document.getElementById('map').style.display = 'none';
+  document.getElementById('map-placeholder').style.display = 'flex';
+  if (_map) { _map.remove(); _map = null; _marker = null; }
+}
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+load();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </body>
 </html>
