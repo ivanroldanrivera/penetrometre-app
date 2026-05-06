@@ -195,6 +195,18 @@
   .hidden { display:none; }
   .lc { text-transform:none !important; }
 
+  /* SONDAGES LIST */
+  .sondage-row { display:flex; align-items:center; padding:10px 6px; border-bottom:0.5px solid var(--border); gap:8px; }
+  .sondage-row:last-child { border-bottom:none; }
+  .sondage-row.active { background:var(--bg2); border-radius:var(--radius-sm); padding:10px; }
+  .sondage-row-main { flex:1; cursor:pointer; }
+  .sondage-row-main:active { opacity:0.6; }
+  .sondage-nom { font-size:15px; font-weight:500; color:var(--text); }
+  .sondage-badge { display:inline-block; font-size:9px; font-weight:600; background:var(--blue); color:#fff; padding:1px 6px; border-radius:8px; letter-spacing:0.05em; margin-left:4px; vertical-align:middle; }
+  .sondage-meta { font-size:11px; color:var(--text2); margin-top:2px; }
+  .sondage-del { background:transparent; border:0.5px solid var(--border); border-radius:8px; padding:6px 10px; font-size:14px; cursor:pointer; color:var(--text2); }
+  .sondage-del:active { background:var(--red-bg); color:var(--red); border-color:#F09595; }
+
   /* OBSERVATIONS */
   .obs-textarea { width:100%; min-height:70px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; }
 
@@ -218,17 +230,18 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v11</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v13</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
     </div>
   </div>
 
-  <div class="tabs">
+  <div class="tabs" style="grid-template-columns:1fr 1fr 1fr 1fr 1fr;">
     <button class="tab active" onclick="showTab('saisie')">Saisie</button>
     <button class="tab" onclick="showTab('donnees')">Données</button>
-    <button class="tab" onclick="showTab('graphique')">Graphique</button>
+    <button class="tab" onclick="showTab('graphique')">Courbe</button>
+    <button class="tab" onclick="showTab('sondages')">Sondages</button>
     <button class="tab" onclick="showTab('config')">Config</button>
   </div>
 
@@ -316,7 +329,7 @@
       <button class="btn-red"  onclick="nouveauSondage()">🗑 Nouveau sondage</button>
     </div>
     <div style="margin-bottom:8px;">
-      <button class="btn-blue" style="width:100%;background:var(--green);" onclick="window.open('rapport.html','_blank')">📄 Rapport PDF</button>
+      <button class="btn-blue" style="width:100%;background:var(--green);" onclick="generatePDF()">📄 Générer PDF</button>
     </div>
     <div class="card" id="stats-card" style="display:none">
       <div class="stats-row" id="stats-row"></div>
@@ -355,14 +368,34 @@
     </div>
   </div>
 
+  <!-- ══ SONDAGES ══ -->
+  <div id="tab-sondages" class="hidden">
+    <div class="card">
+      <div class="clabel">Chantier</div>
+      <div class="irow"><label>Nom</label>     <input type="text" id="chant-input" placeholder="Nom du chantier" autocomplete="off" onchange="saveChantier()"/></div>
+      <div class="irow"><label>Opérateur</label><input type="text" id="chant-operateur" placeholder="Nom de l'opérateur" autocomplete="off" onchange="saveChantier()"/></div>
+      <div class="irow"><label>Date</label>    <input type="date" id="chant-date" onchange="saveChantier()"/></div>
+    </div>
+    <div class="card">
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Sondages enregistrés</div>
+        <button class="sort-btn" onclick="nouveauSondage()" style="background:var(--blue);color:#fff;border-color:var(--blue);">+ Nouveau</button>
+      </div>
+      <div class="edit-hint">Toucher un sondage pour basculer · 🗑 pour supprimer</div>
+      <div id="sondages-list"></div>
+    </div>
+    <div class="data-btns">
+      <button class="btn-blue" onclick="exportAllExcel()">⬇ Excel (chantier complet)</button>
+      <button class="btn-blue" style="background:var(--green);" onclick="generatePDF()">📄 PDF</button>
+    </div>
+  </div>
+
   <!-- ══ CONFIG ══ -->
   <div id="tab-config" class="hidden">
     <div class="card">
-      <div class="clabel">Sondage</div>
-      <div class="irow"><label>Chantier</label>     <input type="text" id="cfg-chantier" placeholder="Nom du chantier" autocomplete="off"/></div>
-      <div class="irow"><label>Sondage n°</label>   <input type="text" id="cfg-sondage"  placeholder="SP1" autocomplete="off"/></div>
-      <div class="irow"><label>Opérateur</label>    <input type="text" id="cfg-operateur" placeholder="Nom" autocomplete="off"/></div>
-      <div class="irow"><label>Date</label>          <input type="date" id="cfg-date"/></div>
+      <div class="clabel">Sondage actuel</div>
+      <div class="irow"><label>Nom du sondage</label><input type="text" id="cfg-sondage" placeholder="P1" autocomplete="off"/></div>
+      <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
     <div class="card">
       <div class="clabel">Paramètres Pénétromètre</div>
@@ -456,15 +489,94 @@
 
 <script>
 // ══ STATE ══════════════════════════════════════════════════════════════
-let S = {
-  passes: [], coups: 0, tiges: 2, gps: null, niveauEau: null, cote: null,
-  observations: '', photos: [],
-  cfg: {
-    chantier:'', sondage:'SP1', operateur:'', date:today(),
-    profMax:800, refusSeuil:50,
-    M:10, h:0.54, Mg:5.21, Mt:0.59, Mp:0.06, A:4, Lt:0.5
+// DB = base de données complète : chantier + tous les sondages + paramètres
+let DB = null;
+// S = pointeur vers le sondage actif (objet dans DB.sondages)
+let S = null;
+
+function _newSondageObj(nom) {
+  return {
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    nom: nom || 'P1',
+    passes: [], coups: 0, tiges: 2,
+    gps: null, niveauEau: null, cote: null,
+    observations: '', photos: [],
+    ts: new Date().toISOString()
+  };
+}
+
+function _newDB() {
+  return {
+    chantier: '', operateur: '', date: today(),
+    cfg: {
+      profMax: 800, refusSeuil: 50,
+      M: 10, h: 0.54, Mg: 5.21, Mt: 0.59, Mp: 0.06, A: 4, Lt: 0.5
+    },
+    sondages: [],
+    activeId: null
+  };
+}
+
+function _activeSondage() {
+  if (!DB || !DB.activeId) return null;
+  return DB.sondages.find(s => s.id === DB.activeId) || DB.sondages[0] || null;
+}
+
+function _wireProxy(sondage) {
+  // Compatibilité : S.cfg.X redirige vers DB.X ou DB.cfg.X
+  if (sondage._proxied) return;
+  Object.defineProperty(sondage, 'cfg', {
+    get: function() {
+      return new Proxy({}, {
+        get(_, prop) {
+          if (prop === 'chantier')  return DB.chantier;
+          if (prop === 'operateur') return DB.operateur;
+          if (prop === 'date')      return DB.date;
+          if (prop === 'sondage')   return sondage.nom;
+          return DB.cfg[prop];
+        },
+        set(_, prop, value) {
+          if (prop === 'chantier')      DB.chantier = value;
+          else if (prop === 'operateur') DB.operateur = value;
+          else if (prop === 'date')      DB.date = value;
+          else if (prop === 'sondage')   sondage.nom = value;
+          else                           DB.cfg[prop] = value;
+          return true;
+        }
+      });
+    },
+    configurable: true
+  });
+  sondage._proxied = true;
+}
+
+function _setActive(id) {
+  DB.activeId = id;
+  S = _activeSondage();
+  if (S) _wireProxy(S);
+}
+
+function newSondage(nom) {
+  if (!nom) {
+    // Trouver le numéro suivant en regardant tous les sondages existants
+    const nums = DB.sondages.map(s => parseInt((s.nom||'').replace(/\D/g,'')||'0')).filter(n => !isNaN(n));
+    const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+    nom = 'P' + nextNum;
   }
-};
+  const sondage = _newSondageObj(nom);
+  DB.sondages.push(sondage);
+  _setActive(sondage.id);
+  return sondage;
+}
+
+function deleteSondage(id) {
+  DB.sondages = DB.sondages.filter(s => s.id !== id);
+  if (DB.activeId === id) {
+    if (DB.sondages.length) _setActive(DB.sondages[0].id);
+    else { newSondage('P1'); }
+  }
+}
+
 let sortDesc   = false;
 let editIdx    = -1;
 let editTigesTemp = 0;
@@ -473,23 +585,71 @@ let tigesModalTemp = 0;
 function today() { return new Date().toISOString().slice(0,10); }
 
 function load() {
-  try { const s = localStorage.getItem('pdl_v5'); if (s) S = JSON.parse(s); } catch(e) {}
-  if (!S.gps)    S.gps    = null;
-  if (S.niveauEau===undefined) S.niveauEau = null;
-  if (!S.tiges)  S.tiges  = 2;
-  if (!S.cfg.Lt) S.cfg.Lt = 0.5;
-  if (S.cote === undefined) S.cote = null;
-  if (S.observations===undefined) S.observations = '';
-  if (!Array.isArray(S.photos))   S.photos = [];
+  // 1) Tenter le nouveau format pdl_v7 (multi-sondages)
+  try {
+    const raw = localStorage.getItem('pdl_v7');
+    if (raw) DB = JSON.parse(raw);
+  } catch(e) {}
+
+  // 2) Migration depuis pdl_v5 (sondage unique)
+  if (!DB || !DB.sondages) {
+    DB = _newDB();
+    try {
+      const oldRaw = localStorage.getItem('pdl_v5');
+      if (oldRaw) {
+        const old = JSON.parse(oldRaw);
+        DB.chantier  = (old.cfg && old.cfg.chantier) || '';
+        DB.operateur = (old.cfg && old.cfg.operateur) || '';
+        DB.date      = (old.cfg && old.cfg.date) || today();
+        if (old.cfg) {
+          DB.cfg.profMax    = old.cfg.profMax    || 800;
+          DB.cfg.refusSeuil = old.cfg.refusSeuil || 50;
+          DB.cfg.M  = old.cfg.M  || 10;
+          DB.cfg.h  = old.cfg.h  || 0.54;
+          DB.cfg.Mg = old.cfg.Mg || 5.21;
+          DB.cfg.Mt = old.cfg.Mt || 0.59;
+          DB.cfg.Mp = old.cfg.Mp || 0.06;
+          DB.cfg.A  = old.cfg.A  || 4;
+          DB.cfg.Lt = old.cfg.Lt || 0.5;
+        }
+        // Migrer le sondage existant
+        const sondage = _newSondageObj((old.cfg && old.cfg.sondage) || 'P1');
+        sondage.passes       = old.passes || [];
+        sondage.coups        = old.coups  || 0;
+        sondage.tiges        = old.tiges  || 2;
+        sondage.gps          = old.gps    || null;
+        sondage.niveauEau    = (old.niveauEau!==undefined) ? old.niveauEau : null;
+        sondage.cote         = (old.cote!==undefined) ? old.cote : null;
+        sondage.observations = old.observations || '';
+        sondage.photos       = Array.isArray(old.photos) ? old.photos : [];
+        DB.sondages.push(sondage);
+        DB.activeId = sondage.id;
+      }
+    } catch(e) {}
+  }
+
+  // 3) S'assurer qu'il existe au moins un sondage actif
+  if (!DB.sondages.length) newSondage('P1');
+  if (!DB.activeId || !_activeSondage()) DB.activeId = DB.sondages[0].id;
+
+  _setActive(DB.activeId);
   syncFields(); render();
 }
 
 function save() {
   try {
-    localStorage.setItem('pdl_v5', JSON.stringify(S));
+    // Nettoyer les proxies avant sérialisation
+    const dbToSave = JSON.parse(JSON.stringify(DB, (k,v) => k === '_proxied' ? undefined : v));
+    localStorage.setItem('pdl_v7', JSON.stringify(dbToSave));
     document.getElementById('save-status').textContent =
       'Sauvegardé ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   } catch(e) { document.getElementById('save-status').textContent = '⚠ Erreur'; }
+}
+
+function switchSondage(id) {
+  _setActive(id);
+  save(); syncFields(); render();
+  showTab('saisie');
 }
 
 // ══ HELPERS ═══════════════════════════════════════════════════════════
@@ -902,48 +1062,24 @@ function exportCSV() {
 
 // ══ CONFIG ════════════════════════════════════════════════════════════
 function nouveauSondage() {
-  const hasData = S.passes.length > 0 || S.gps || S.niveauEau !== null;
-
-  if (hasData) {
-    const summary = 'Sondage actuel : ' + (S.cfg.sondage || 'SP1') + '\n' +
-                    'Passes : ' + S.passes.length + '  ·  Profondeur : ' + (depth()/100).toFixed(2) + ' m';
-    const shouldExport = confirm(
-      summary + '\n\n' +
-      'Voulez-vous EXPORTER le CSV avant de continuer ?\n\n' +
-      '• OK = Exporter le CSV maintenant\n' +
-      '• Annuler = Continuer sans exporter'
-    );
-    if (shouldExport) {
-      try { exportCSV(); } catch(e) {}
-    }
-    if (!confirm(
-      '⚠ ATTENTION — Les données du sondage actuel vont être SUPPRIMÉES.\n\n' +
-      '(passes, GPS, niveau d\'eau, observations, photos)\n\n' +
-      'Confirmer la création d\'un nouveau sondage ?'
-    )) return;
-  } else {
-    if (!confirm('Démarrer un nouveau sondage ?')) return;
-  }
-
-  const cur = S.cfg.sondage || 'SP1';
-  const num = parseInt(cur.replace(/\D/g,'') || '1');
-  const pfx = cur.replace(/\d+/g,'') || 'SP';
-  const nom = prompt('Numéro du nouveau sondage :', pfx + (num + 1));
+  // Calculer le prochain nom suggéré (P + numéro suivant)
+  const nums = DB.sondages.map(s => parseInt((s.nom||'').replace(/\D/g,'')||'0')).filter(n => !isNaN(n));
+  const nextNum = nums.length ? Math.max(...nums) + 1 : 1;
+  const suggestion = 'P' + nextNum;
+  const nom = prompt(
+    'Nom du nouveau sondage :\n\n' +
+    '(Le sondage actuel "' + (S ? S.nom : '—') + '" sera conservé dans la liste)',
+    suggestion
+  );
   if (nom === null) return;
-
-  S.passes = []; S.coups = 0; S.tiges = 2;
-  S.gps = null; S.niveauEau = null; S.cote = null;
-  S.observations = ''; S.photos = [];
-  S.cfg.sondage = nom || pfx + (num + 1);
+  newSondage(nom.trim() || suggestion);
   if (typeof resetMap !== 'undefined') resetMap();
   save(); syncFields(); render();
+  showTab('saisie');
 }
 
 function saveConfig() {
-  S.cfg.chantier  =document.getElementById('cfg-chantier').value.trim();
-  S.cfg.sondage   =document.getElementById('cfg-sondage').value.trim()||'SP1';
-  S.cfg.operateur =document.getElementById('cfg-operateur').value.trim();
-  S.cfg.date      =document.getElementById('cfg-date').value;
+  S.cfg.sondage   =document.getElementById('cfg-sondage').value.trim()||'P1';
   S.cfg.profMax   =parseInt(document.getElementById('cfg-profmax').value)||800;
   S.cfg.refusSeuil=parseInt(document.getElementById('cfg-refus').value)||50;
   S.cfg.M =parseFloat(document.getElementById('cfg-M').value)||10;
@@ -1017,10 +1153,7 @@ function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div
 
 function syncFields(){
   const c=S.cfg;
-  document.getElementById('cfg-chantier').value =c.chantier||'';
-  document.getElementById('cfg-sondage').value  =c.sondage||'SP1';
-  document.getElementById('cfg-operateur').value=c.operateur||'';
-  document.getElementById('cfg-date').value     =c.date||'';
+  document.getElementById('cfg-sondage').value  =c.sondage||'P1';
   document.getElementById('cfg-profmax').value  =c.profMax||800;
   document.getElementById('cfg-refus').value    =c.refusSeuil||50;
   document.getElementById('cfg-M').value =c.M||10;
@@ -1098,9 +1231,11 @@ function renderChart() {
 
 // ══ TABS ══════════════════════════════════════════════════════════════
 function showTab(t){
-  ['saisie','donnees','graphique','config'].forEach(id=>document.getElementById('tab-'+id).classList.toggle('hidden',id!==t));
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',['saisie','donnees','graphique','config'][i]===t));
+  const tabs = ['saisie','donnees','graphique','sondages','config'];
+  tabs.forEach(id=>document.getElementById('tab-'+id).classList.toggle('hidden',id!==t));
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
   if(t==='graphique') renderChart();
+  if(t==='sondages') renderSondagesTab();
 }
 
 // ══ MAP ═══════════════════════════════════════════════════════════════
@@ -1141,6 +1276,428 @@ function resetMap() {
   if (_map) { _map.remove(); _map = null; _marker = null; }
 }
 
+// ══ SONDAGES TAB ═════════════════════════════════════════════════════
+function renderSondagesTab() {
+  const c = document.getElementById('chant-input');     if (c) c.value = DB.chantier;
+  const o = document.getElementById('chant-operateur'); if (o) o.value = DB.operateur;
+  const d = document.getElementById('chant-date');      if (d) d.value = DB.date;
+  const list = document.getElementById('sondages-list');
+  if (!list) return;
+  if (!DB.sondages.length) { list.innerHTML = '<div class="empty">Aucun sondage</div>'; return; }
+  list.innerHTML = DB.sondages.map(s => {
+    const prof = (s.passes||[]).length * 0.10;
+    const ref = (s.passes||[]).some(p=>p.r);
+    const isActive = s.id === DB.activeId;
+    const dateStr = (s.ts||'').slice(0,10);
+    return '<div class="sondage-row'+(isActive?' active':'')+'">'+
+      '<div class="sondage-row-main" onclick="switchSondage(\''+s.id+'\')">'+
+        '<div class="sondage-nom">'+(s.nom||'—')+(isActive?' <span class="sondage-badge">ACTUEL</span>':'')+'</div>'+
+        '<div class="sondage-meta">'+(s.passes||[]).length+' passes · '+prof.toFixed(2)+' m'+(ref?' · refus':'')+' · '+dateStr+'</div>'+
+      '</div>'+
+      '<button class="sondage-del" onclick="confirmDeleteSondage(\''+s.id+'\')">🗑</button>'+
+    '</div>';
+  }).join('');
+}
+
+function saveChantier() {
+  const c = document.getElementById('chant-input');     if (c) DB.chantier = c.value.trim();
+  const o = document.getElementById('chant-operateur'); if (o) DB.operateur = o.value.trim();
+  const d = document.getElementById('chant-date');      if (d) DB.date = d.value;
+  save(); render(); renderSondagesTab();
+}
+
+function confirmDeleteSondage(id) {
+  const s = DB.sondages.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm('Supprimer le sondage "' + s.nom + '" ?\nCette action est irréversible.')) return;
+  deleteSondage(id);
+  save(); syncFields(); render(); renderSondagesTab();
+}
+
+// ══ PDF GENERATION ════════════════════════════════════════════════════
+function generatePDF() {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("Bibliothèque PDF non chargée.\nConnectez-vous une fois pour la télécharger.");
+    return;
+  }
+  const choice = prompt(
+    "Quel rapport générer ?\n\n" +
+    "1 = Court (1 page : ID + courbe + tableau)\n" +
+    "2 = Complet (avec observations + photos)\n" +
+    "3 = Multi-sondages (synthèse du chantier)\n\n" +
+    "Tapez 1, 2 ou 3 :",
+    "2"
+  );
+  if (!choice) return;
+  if (choice.trim() === '1') return _pdfCourt(S);
+  if (choice.trim() === '2') return _pdfComplet(S);
+  if (choice.trim() === '3') return _pdfMulti();
+  alert("Choix invalide");
+}
+
+function _pdfHeader(doc, sondage, m) {
+  doc.setFontSize(16); doc.setFont(undefined, 'bold');
+  doc.text('Pénétromètre Dynamique Léger', m, 18);
+  doc.setFontSize(9); doc.setFont(undefined, 'normal');
+  doc.text('Norme PDL NF P 94-115', m, 24);
+  doc.setFontSize(10); doc.setFont(undefined, 'bold');
+  doc.text((DB.chantier || '—'), 210 - m, 18, { align: 'right' });
+  doc.setFont(undefined, 'normal');
+  doc.text('Sondage : ' + (sondage.nom || '—'), 210 - m, 24, { align: 'right' });
+}
+
+function _pdfDrawChart(doc, sondage, x, y, w, h) {
+  const passes = sondage.passes || [];
+  const pts = passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
+  if (!pts.length) {
+    doc.setFontSize(8); doc.setTextColor(120); doc.text('Aucune donnée graphique', x + w/2, y + h/2, { align:'center' });
+    doc.setTextColor(0);
+    return;
+  }
+  const cote = (sondage.cote != null) ? parseFloat(sondage.cote) : NaN;
+  const showAlt = !isNaN(cote);
+  const PL = 18, PR = showAlt ? 18 : 6, PT = 6, PB = 14;
+  const cw = w - PL - PR, ch = h - PT - PB;
+  const minQd = Math.max(0.01, Math.min(...pts.map(x=>x.qd))*0.5);
+  const maxQd = Math.max(...pts.map(x=>x.qd))*2;
+  const minD = Math.min(...pts.map(x=>x.d)), totalD = Math.abs(minD)||1;
+  const logMin = Math.log10(minQd), logRange = Math.log10(maxQd) - logMin || 1;
+  const xS = v => x + PL + (Math.log10(Math.max(v,minQd)) - logMin) / logRange * cw;
+  const yS = d => y + PT + ((0 - d) / totalD) * ch;
+  // axes
+  doc.setDrawColor(80); doc.setLineWidth(0.3);
+  doc.line(x+PL, y+PT, x+PL, y+PT+ch);
+  doc.line(x+PL, y+PT+ch, x+PL+cw, y+PT+ch);
+  if (showAlt) { doc.setDrawColor(15,110,86); doc.line(x+PL+cw, y+PT, x+PL+cw, y+PT+ch); doc.setDrawColor(80); }
+  // grid X (log ticks)
+  doc.setDrawColor(220); doc.setLineWidth(0.1);
+  doc.setFontSize(6); doc.setTextColor(110);
+  const ticks = [];
+  for (let exp = Math.floor(logMin); exp <= Math.ceil(Math.log10(maxQd)); exp++) {
+    for (const m of [1,2,5]) {
+      const v = m * Math.pow(10, exp);
+      if (v >= minQd*0.9 && v <= maxQd*1.1) ticks.push(v);
+    }
+  }
+  [...new Set(ticks)].sort((a,b)=>a-b).forEach(v => {
+    const xc = xS(v);
+    doc.line(xc, y+PT, xc, y+PT+ch);
+    const lbl = v >= 1 ? v.toFixed(v<10?1:0) : v.toFixed(2);
+    doc.text(lbl, xc, y+PT+ch+3, { align:'center' });
+  });
+  // grid Y
+  pts.forEach(pt => {
+    const py = yS(pt.d);
+    doc.setDrawColor(232); doc.line(x+PL, py, x+PL+cw, py);
+    doc.setTextColor(110);
+    doc.text(pt.d.toFixed(2), x+PL-1, py+1, { align:'right' });
+    if (showAlt) { doc.setTextColor(15,110,86); doc.text((cote+pt.d).toFixed(2), x+PL+cw+1, py+1); }
+  });
+  // path
+  doc.setDrawColor(24,95,165); doc.setLineWidth(0.5);
+  for (let i=1;i<pts.length;i++) {
+    doc.line(xS(pts[i-1].qd), yS(pts[i-1].d), xS(pts[i].qd), yS(pts[i].d));
+  }
+  // dots and labels
+  doc.setFillColor(24,95,165); doc.setTextColor(0);
+  pts.forEach(pt => {
+    doc.circle(xS(pt.qd), yS(pt.d), 0.6, 'F');
+    doc.text(pt.qd.toFixed(2), xS(pt.qd)+1.5, yS(pt.d)+1);
+  });
+  // axis titles
+  doc.setFontSize(7); doc.setTextColor(80);
+  doc.text('qd [MPa] log', x+PL+cw/2, y+h-2, { align:'center' });
+  doc.text('Profondeur [m]', x+2, y+PT+ch/2, { align:'left', angle: 90 });
+  if (showAlt) { doc.setTextColor(15,110,86); doc.text('Altitude [m]', x+w-2, y+PT+ch/2, { align:'right', angle: -90 }); }
+  doc.setTextColor(0); doc.setDrawColor(0); doc.setFillColor(0);
+}
+
+function _pdfTableData(doc, sondage, startY, m, withNotes) {
+  const passes = sondage.passes || [];
+  const hasNotes = withNotes && passes.some(p => p.note && p.note.trim());
+  const head = hasNotes
+    ? [['De (m)','À (m)','N','Tiges','qd MPa','Note']]
+    : [['De (m)','À (m)','N','Tiges','qd MPa']];
+  const rows = passes.map(p => {
+    const qd = calcQd(p.c, p.n);
+    const base = [
+      (p.d0/100).toFixed(2),
+      (p.d1/100).toFixed(2),
+      String(p.c),
+      String(p.n),
+      qd != null ? qd.toFixed(2) : (p.r ? 'REF' : '—')
+    ];
+    return hasNotes ? [...base, p.note || ''] : base;
+  });
+  doc.autoTable({
+    startY: startY,
+    head: head,
+    body: rows,
+    theme: 'striped',
+    headStyles: { fillColor: [40,40,40], textColor: 255, fontSize: 7.5, halign: 'center' },
+    bodyStyles: { fontSize: 7.5, halign: 'center' },
+    columnStyles: hasNotes ? { 5: { halign:'left', cellWidth: 'auto' } } : {},
+    margin: { left: m, right: m },
+    didParseCell: function(data) {
+      if (data.section === 'body' && passes[data.row.index] && passes[data.row.index].r) {
+        data.cell.styles.fillColor = [255, 240, 240];
+        data.cell.styles.textColor = [163, 45, 45];
+      }
+    }
+  });
+}
+
+function _pdfInfoBlock(doc, sondage, m, y) {
+  const passes = sondage.passes || [];
+  const prof = (passes.length * 0.10).toFixed(2) + ' m';
+  const refus = passes.length && passes[passes.length-1].r;
+  const eau = (sondage.niveauEau != null) ? sondage.niveauEau + ' m' : 'Non rencontré';
+  const cote = (sondage.cote != null) ? sondage.cote + ' m' : '—';
+  const arret = passes.length ? (refus ? 'Refus' : 'Arrêt opérateur') : '—';
+  doc.autoTable({
+    startY: y,
+    head: [['Opérateur', 'Date', 'Prof. atteinte', 'Eau', 'Cote réf.', 'Arrêt']],
+    body: [[(DB.operateur||'—'), (DB.date||'—'), prof, eau, cote, arret]],
+    theme: 'grid',
+    headStyles: { fillColor: [24,95,165], textColor: 255, fontSize: 7.5 },
+    bodyStyles: { fontSize: 8, halign: 'center' },
+    margin: { left: m, right: m }
+  });
+}
+
+function _pdfCourt(sondage) {
+  if (!sondage || !(sondage.passes||[]).length) { alert('Aucune donnée à exporter pour ce sondage.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const m = 14;
+  _pdfHeader(doc, sondage, m);
+  doc.setLineWidth(0.3); doc.setDrawColor(180); doc.line(m, 27, 210-m, 27);
+  _pdfInfoBlock(doc, sondage, m, 32);
+  // Layout: tableau à gauche, courbe à droite
+  const tabY = doc.lastAutoTable.finalY + 4;
+  doc.autoTable({
+    startY: tabY,
+    head: [['De (m)','À (m)','N','Tiges','qd']],
+    body: (sondage.passes||[]).map(p => {
+      const qd = calcQd(p.c, p.n);
+      return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
+    }),
+    theme: 'striped',
+    headStyles: { fillColor: [40,40,40], textColor: 255, fontSize: 7 },
+    bodyStyles: { fontSize: 7, halign: 'center' },
+    margin: { left: m, right: 110 },
+    tableWidth: 80
+  });
+  _pdfDrawChart(doc, sondage, 100, tabY, 100, 200);
+  doc.setFontSize(7); doc.setTextColor(120);
+  doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
+  doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_court.pdf');
+}
+
+function _pdfComplet(sondage) {
+  if (!sondage || !(sondage.passes||[]).length) { alert('Aucune donnée à exporter pour ce sondage.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const m = 14;
+  _pdfHeader(doc, sondage, m);
+  doc.setLineWidth(0.3); doc.setDrawColor(180); doc.line(m, 27, 210-m, 27);
+  _pdfInfoBlock(doc, sondage, m, 32);
+  // Params penetrometre
+  doc.setFontSize(7); doc.setTextColor(80);
+  const p = DB.cfg;
+  doc.text('Paramètres : M='+p.M+'kg · h='+p.h+'m · Mg='+p.Mg+' · Mt='+p.Mt+' · Mp='+p.Mp+' · A='+p.A+'cm² · Lt='+p.Lt+'m', m, doc.lastAutoTable.finalY + 4);
+  doc.setTextColor(0);
+  // Chart
+  const chartY = doc.lastAutoTable.finalY + 8;
+  _pdfDrawChart(doc, sondage, m, chartY, 90, 110);
+  // Table
+  doc.autoTable({
+    startY: chartY,
+    head: [['De','À','N','T','qd']],
+    body: (sondage.passes||[]).map(p => {
+      const qd = calcQd(p.c, p.n);
+      return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
+    }),
+    theme: 'striped',
+    headStyles: { fillColor: [40,40,40], textColor: 255, fontSize: 6.5, halign:'center' },
+    bodyStyles: { fontSize: 6.5, halign: 'center' },
+    margin: { left: 110, right: m },
+    tableWidth: 86
+  });
+  // Observations
+  let obsY = Math.max(chartY + 115, doc.lastAutoTable.finalY + 5);
+  if (sondage.observations && sondage.observations.trim()) {
+    doc.setFontSize(9); doc.setFont(undefined, 'bold');
+    doc.text('Observations', m, obsY);
+    doc.setFont(undefined, 'normal'); doc.setFontSize(8);
+    const lines = doc.splitTextToSize(sondage.observations, 210 - 2*m);
+    doc.text(lines, m, obsY + 5);
+    obsY += 5 + lines.length * 4;
+  }
+  // GPS
+  if (sondage.gps) {
+    doc.setFontSize(8);
+    doc.text('GPS : ' + sondage.gps.lat.toFixed(6) + ', ' + sondage.gps.lon.toFixed(6) + (sondage.gps.acc>0 ? ' (±'+sondage.gps.acc+'m)' : ''), m, obsY + 4);
+    obsY += 6;
+  }
+  // Photos page(s)
+  const photos = sondage.photos || [];
+  if (photos.length) {
+    doc.addPage();
+    doc.setFontSize(12); doc.setFont(undefined, 'bold');
+    doc.text('Photos du site — ' + (sondage.nom||''), m, 18);
+    doc.setFont(undefined, 'normal');
+    let px = m, py = 26;
+    const pw = (210 - 3*m) / 2, ph = 60;
+    photos.forEach((ph_, i) => {
+      try { doc.addImage(ph_.dataUrl, 'JPEG', px, py, pw, ph); } catch(e) {}
+      doc.setFontSize(7);
+      doc.text(ph_.caption || ('Photo '+(i+1)), px + pw/2, py + ph + 3, { align: 'center' });
+      if (i % 2 === 0) { px = m + pw + m; }
+      else { px = m; py += ph + 8; if (py + ph > 280) { doc.addPage(); py = 18; } }
+    });
+  }
+  doc.setFontSize(7); doc.setTextColor(120);
+  doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
+  doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_complet.pdf');
+}
+
+function _pdfMulti() {
+  if (!DB.sondages.length) { alert('Aucun sondage à exporter.'); return; }
+  const valid = DB.sondages.filter(s => (s.passes||[]).length > 0);
+  if (!valid.length) { alert('Aucun sondage avec des données.'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const m = 14;
+  // Page de garde
+  doc.setFontSize(20); doc.setFont(undefined, 'bold');
+  doc.text('Synthèse des sondages PDL', 105, 40, { align: 'center' });
+  doc.setFontSize(14); doc.setFont(undefined, 'normal');
+  doc.text(DB.chantier || 'Chantier non renseigné', 105, 55, { align: 'center' });
+  doc.setFontSize(10);
+  doc.text('Opérateur : ' + (DB.operateur||'—'), 105, 65, { align: 'center' });
+  doc.text('Date : ' + (DB.date||'—'), 105, 71, { align: 'center' });
+  doc.text(valid.length + ' sondage(s)', 105, 77, { align: 'center' });
+  // Tableau résumé
+  const summary = valid.map(s => {
+    const passes = s.passes || [];
+    const refus = passes.length && passes[passes.length-1].r;
+    const totalCoups = passes.reduce((a,p)=>a+p.c,0);
+    const qdMax = Math.max(...passes.filter(p=>!p.r&&p.c>0).map(p=>calcQd(p.c,p.n)||0));
+    return [
+      s.nom || '—',
+      passes.length,
+      (passes.length * 0.10).toFixed(2),
+      (s.niveauEau != null) ? s.niveauEau.toFixed(2) : '—',
+      refus ? 'Refus' : (passes.length ? 'Op.' : '—'),
+      isFinite(qdMax) && qdMax > 0 ? qdMax.toFixed(2) : '—'
+    ];
+  });
+  doc.autoTable({
+    startY: 90,
+    head: [['Sondage', 'Passes', 'Prof. (m)', 'Eau (m)', 'Arrêt', 'qd max']],
+    body: summary,
+    theme: 'grid',
+    headStyles: { fillColor: [24,95,165], textColor: 255, fontSize: 9 },
+    bodyStyles: { fontSize: 9, halign: 'center' },
+    margin: { left: m, right: m }
+  });
+  doc.setFontSize(7); doc.setTextColor(120);
+  doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
+  // Une page courte par sondage
+  valid.forEach(sondage => {
+    doc.addPage();
+    doc.setTextColor(0);
+    _pdfHeader(doc, sondage, m);
+    doc.setLineWidth(0.3); doc.setDrawColor(180); doc.line(m, 27, 210-m, 27);
+    _pdfInfoBlock(doc, sondage, m, 32);
+    const tabY = doc.lastAutoTable.finalY + 4;
+    doc.autoTable({
+      startY: tabY,
+      head: [['De','À','N','T','qd']],
+      body: (sondage.passes||[]).map(p => {
+        const qd = calcQd(p.c, p.n);
+        return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
+      }),
+      theme: 'striped',
+      headStyles: { fillColor: [40,40,40], textColor: 255, fontSize: 6.5, halign:'center' },
+      bodyStyles: { fontSize: 6.5, halign: 'center' },
+      margin: { left: m, right: 110 },
+      tableWidth: 80
+    });
+    _pdfDrawChart(doc, sondage, 100, tabY, 100, 180);
+    doc.setFontSize(7); doc.setTextColor(120);
+    doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
+  });
+  doc.save((DB.chantier || 'chantier').replace(/\s+/g,'_') + '_synthese.pdf');
+}
+
+// ══ EXPORT EXCEL MULTI-SONDAGES ════════════════════════════════════════
+function exportAllExcel() {
+  if (typeof XLSX === 'undefined' || !XLSX.utils || !XLSX.writeFile) {
+    alert("Bibliothèque Excel non chargée."); return;
+  }
+  const valid = DB.sondages.filter(s => (s.passes||[]).length > 0);
+  if (!valid.length) { alert('Aucun sondage avec données.'); return; }
+  const wb = XLSX.utils.book_new();
+  // Synthèse
+  const synth = [
+    ['Synthèse PDL — ' + (DB.chantier || 'Chantier')],
+    ['Opérateur', DB.operateur || '—'],
+    ['Date',      DB.date || '—'],
+    [],
+    ['Sondage','Passes','Profondeur (m)','Eau (m)','Cote ref (m)','Arrêt','qd max (MPa)']
+  ];
+  valid.forEach(s => {
+    const passes = s.passes || [];
+    const refus = passes.length && passes[passes.length-1].r;
+    const qds = passes.filter(p=>!p.r&&p.c>0).map(p=>calcQd(p.c,p.n)).filter(x=>x);
+    const qdMax = qds.length ? Math.max(...qds) : 0;
+    synth.push([
+      s.nom||'—',
+      passes.length,
+      +(passes.length*0.10).toFixed(2),
+      (s.niveauEau!=null) ? s.niveauEau : 'Non rencontré',
+      (s.cote!=null) ? s.cote : '—',
+      refus ? 'Refus' : 'Arrêt opérateur',
+      qdMax > 0 ? +qdMax.toFixed(2) : 'NA'
+    ]);
+  });
+  const wsSynth = XLSX.utils.aoa_to_sheet(synth);
+  wsSynth['!cols'] = [{wch:14},{wch:10},{wch:14},{wch:14},{wch:12},{wch:18},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsSynth, 'Synthèse');
+  // Une feuille par sondage
+  valid.forEach(s => {
+    const data = [
+      ['Sondage', s.nom||'—'],
+      ['Chantier', DB.chantier||'—'],
+      ['Date', DB.date||'—'],
+      ['Opérateur', DB.operateur||'—'],
+      ['Profondeur atteinte (m)', +((s.passes||[]).length*0.10).toFixed(2)],
+      ['Niveau d\'eau (m)', s.niveauEau!=null ? s.niveauEau : 'Non rencontré'],
+      ['Cote de référence (m)', s.cote!=null ? s.cote : '—'],
+      ['GPS', s.gps ? s.gps.lat+', '+s.gps.lon : '—'],
+      ['Observations', s.observations||''],
+      [],
+      ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)','Refus','Note','Timestamp']
+    ];
+    (s.passes||[]).forEach(p => {
+      const qd = calcQd(p.c, p.n);
+      data.push([
+        +(p.d0/100).toFixed(2),+(p.d1/100).toFixed(2),
+        p.c, p.n,
+        qd!=null ? +qd.toFixed(3) : 'NA',
+        p.r ? 'OUI' : 'NON',
+        p.note||'', p.t
+      ]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},{wch:8},{wch:30},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws, (s.nom||'Sondage').slice(0,31));
+  });
+  const filename = ((DB.chantier||'chantier').replace(/\s+/g,'_')) + '_' + (DB.date||today()) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+}
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
     // Check for updates on every page load and on focus
@@ -1166,5 +1723,7 @@ load();
 </script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.0/dist/jspdf.plugin.autotable.min.js"></script>
 </body>
 </html>
