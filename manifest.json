@@ -2,7 +2,8 @@
   "name": "PDL — Pénétromètre Dynamique Léger",
   "short_name": "PDL",
   "description": "Application de terrain pour relevés PDL",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#F4F2EE",
   "theme_color": "#185FA5",
@@ -11,7 +12,14 @@
     {
       "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%23185FA5'/><text y='130' x='96' text-anchor='middle' font-size='110' font-family='serif' fill='white'>P</text></svg>",
       "sizes": "192x192",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='110' fill='%23185FA5'/><text y='350' x='256' text-anchor='middle' font-size='300' font-family='serif' fill='white'>P</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

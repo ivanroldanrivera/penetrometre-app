@@ -1,9 +1,9 @@
-const CACHE = 'pdl-v10';
+const CACHE = 'pdl-v11';
 const LOCAL = [
-  '/penetrometre-app/',
-  '/penetrometre-app/index.html',
-  '/penetrometre-app/rapport.html',
-  '/penetrometre-app/manifest.json'
+  './',
+  './index.html',
+  './rapport.html',
+  './manifest.json'
 ];
 const CDN = [
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
