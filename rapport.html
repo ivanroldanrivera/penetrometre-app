@@ -239,9 +239,8 @@
 <!-- TOOLBAR -->
 <div class="toolbar">
   <span class="toolbar-title">Rapport PDL — Aperçu</span>
-  <!-- logo intégré Terrastice -->
-  <button class="tbtn tbtn-load" onclick="loadFromStorage()">↺ Charger données PDL</button>
-  <button class="tbtn tbtn-print" onclick="window.print()">🖨 Imprimer / PDF</button>
+  <button class="tbtn tbtn-load" onclick="loadFromStorage()">↺ Recharger</button>
+  <button class="tbtn tbtn-print" id="btn-savepdf" onclick="savePDF()" style="background:#0F6E56;color:white;">📥 Télécharger PDF</button>
 </div>
 
 <!-- PAGE A4 -->
@@ -341,9 +340,67 @@
 </div><!-- end .page -->
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
 // ── LOAD DATA FROM PDL APP localStorage ──────────────────────────────
+function _sondageToS(sondage, DB) {
+  return {
+    passes: sondage.passes || [],
+    coups: sondage.coups || 0,
+    tiges: sondage.tiges || 2,
+    gps: sondage.gps || null,
+    niveauEau: sondage.niveauEau,
+    cote: sondage.cote,
+    observations: sondage.observations || '',
+    photos: sondage.photos || [],
+    cfg: Object.assign({}, DB.cfg || {}, {
+      chantier:  DB.chantier  || '',
+      operateur: DB.operateur || '',
+      date:      DB.date      || '',
+      sondage:   sondage.nom  || ''
+    })
+  };
+}
+
 function loadFromStorage() {
+  const params = new URLSearchParams(window.location.search);
+  // Tenter le format multi-sondages pdl_v7
+  try {
+    const raw7 = localStorage.getItem('pdl_v7');
+    if (raw7) {
+      const DB = JSON.parse(raw7);
+      window._DB = DB;
+      // Mode multi : tous les sondages
+      if (params.get('multi') === '1') {
+        const valid = (DB.sondages || []).filter(s => (s.passes||[]).length > 0);
+        if (!valid.length) { alert('Aucun sondage avec des données.'); return; }
+        // Afficher le premier pour avoir un aperçu
+        const first = valid[0];
+        window._currentSondage = first.nom || '';
+        renderReport(_sondageToS(first, DB));
+        // Indiquer mode multi dans le bouton
+        const btn = document.getElementById('btn-savepdf');
+        if (btn) btn.textContent = '📥 PDF (' + valid.length + ' sondages)';
+        if (params.get('autosave') === '1') {
+          setTimeout(() => savePDFMulti(DB, valid), 2000);
+        }
+        return;
+      }
+      // Mode simple : un seul sondage
+      const wantId = params.get('id') || DB.activeId;
+      const sondage = (DB.sondages || []).find(s => s.id === wantId) || (DB.sondages || [])[0];
+      if (sondage) {
+        window._currentSondage = sondage.nom || '';
+        renderReport(_sondageToS(sondage, DB));
+        if (params.get('autosave') === '1') {
+          setTimeout(savePDF, 2000);
+        }
+        return;
+      }
+    }
+  } catch(e) { console.error(e); }
+  // Fallback : ancien format pdl_v5
   try {
     const raw = localStorage.getItem('pdl_v5');
     if (!raw) { alert('Aucune donnée PDL trouvée.\nOuvrez d\'abord l\'application PDL et effectuez un sondage.'); return; }
@@ -351,6 +408,111 @@ function loadFromStorage() {
     renderReport(S);
   } catch(e) {
     alert('Erreur lors du chargement : ' + e.message);
+  }
+}
+
+// ── SAVE PAGE AS PDF (html2canvas + jsPDF) ──────────────────────────
+async function savePDF() {
+  if (typeof html2canvas === 'undefined' || !window.jspdf) {
+    alert('Bibliothèques PDF non chargées. Connectez-vous une fois pour les télécharger.');
+    return;
+  }
+  const btn = document.getElementById('btn-savepdf');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Génération…'; }
+  try {
+    const page = document.getElementById('report-page');
+    // Haute résolution : scale 3 + PNG lossless (poids non limitant)
+    const canvas = await html2canvas(page, {
+      scale: 3,
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      imageTimeout: 0,
+      backgroundColor: '#FDFCFA'
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    const pdfW = 210, pdfH = 297;
+    // Calculer hauteur d'image proportionnelle
+    const imgH = canvas.height * pdfW / canvas.width;
+    let pos = 0;
+    let remaining = imgH;
+    if (imgH <= pdfH) {
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfW, imgH, undefined, 'FAST');
+    } else {
+      // Multi-page
+      while (remaining > 0) {
+        if (pos !== 0) pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, -pos, pdfW, imgH, undefined, 'FAST');
+        remaining -= pdfH;
+        pos += pdfH;
+      }
+    }
+    const c = window._reportCfg || {};
+    const fname = (c.sondage || 'PDL') + '_' + (c.date || '') + '.pdf';
+    pdf.save(fname);
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
+    // Si autosave, fermer la fenêtre après quelques secondes
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autosave') === '1') {
+      setTimeout(() => { try { window.close(); } catch(e) {} }, 1500);
+    }
+  } catch(e) {
+    alert('Erreur PDF : ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
+  }
+}
+
+// ── SAVE MULTI-SONDAGES PDF ─────────────────────────────────────────
+async function savePDFMulti(DB, valid) {
+  if (typeof html2canvas === 'undefined' || !window.jspdf) {
+    alert('Bibliothèques PDF non chargées.'); return;
+  }
+  const btn = document.getElementById('btn-savepdf');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Génération multi…'; }
+  try {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    const pdfW = 210, pdfH = 297;
+    const page = document.getElementById('report-page');
+    for (let i = 0; i < valid.length; i++) {
+      const s = valid[i];
+      if (btn) btn.textContent = '⏳ ' + (i+1) + '/' + valid.length + ' — ' + (s.nom||'');
+      // Render this sondage
+      window._currentSondage = s.nom || '';
+      renderReport(_sondageToS(s, DB));
+      // Wait for render (map tiles, photos)
+      await new Promise(r => setTimeout(r, 1200));
+      // Capture
+      const canvas = await html2canvas(page, {
+        scale: 3, useCORS: true, allowTaint: false, logging: false,
+        imageTimeout: 0, backgroundColor: '#FDFCFA'
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const imgH = canvas.height * pdfW / canvas.width;
+      if (i > 0) pdf.addPage();
+      let pos = 0, remaining = imgH;
+      if (imgH <= pdfH) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfW, imgH, undefined, 'FAST');
+      } else {
+        while (remaining > 0) {
+          if (pos !== 0) pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, -pos, pdfW, imgH, undefined, 'FAST');
+          remaining -= pdfH; pos += pdfH;
+        }
+      }
+    }
+    const fname = ((DB.chantier || 'chantier').replace(/\s+/g,'_')) + '_' + (DB.date || '') + '_multi.pdf';
+    pdf.save(fname);
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autosave') === '1') {
+      setTimeout(() => { try { window.close(); } catch(e) {} }, 1500);
+    }
+  } catch(e) {
+    alert('Erreur PDF multi : ' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
   }
 }
 
@@ -368,6 +530,7 @@ function calcQd(N, n, cfg) {
 // ── RENDER REPORT ─────────────────────────────────────────────────────
 function renderReport(S) {
   window._S = S;
+  window._reportCfg = S.cfg;
   const c = S.cfg, passes = S.passes || [];
 
   // Header
@@ -591,65 +754,7 @@ function renderMap(gps) {
       html: '<div style="width:12px;height:12px;background:#185FA5;border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>',
       iconSize:[12,12], iconAnchor:[6,6], className:''
     });
-    const marker = L.marker([gps.lat, gps.lon], {icon, draggable: true})
-      .addTo(_rmap);
-
-    marker.on('dragend', function(e) {
-      const pos = e.target.getLatLng();
-      const lat = parseFloat(pos.lat.toFixed(6));
-      const lon = parseFloat(pos.lng.toFixed(6));
-      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
-      // Update localStorage if available
-      try {
-        const raw = localStorage.getItem('pdl_v5');
-        if (raw) {
-          const S = JSON.parse(raw);
-          S.gps.lat = lat; S.gps.lon = lon; S.gps.acc = 0;
-          localStorage.setItem('pdl_v5', JSON.stringify(S));
-        }
-      } catch(e) {}
-    });
-  }, 100);
-}
-
-loadFromStorage();
-</script>
-</body>
-</html>
-}, 100);
-}
-
-loadFromStorage();
-</script>
-</body>
-</html>
-);
-</script>
-</body>
-</html>
-er = L.marker([gps.lat, gps.lon], {icon, draggable: true}).addTo(_rmap);
-
-    marker.on('dragend', function(e) {
-      const pos = e.target.getLatLng();
-      const lat = parseFloat(pos.lat.toFixed(6));
-      const lon = parseFloat(pos.lng.toFixed(6));
-      document.getElementById('gps-display').textContent = lat.toFixed(6) + ', ' + lon.toFixed(6);
-      try {
-        const raw = localStorage.getItem('pdl_v5');
-        if (raw) {
-          const S = JSON.parse(raw);
-          S.gps.lat = lat; S.gps.lon = lon; S.gps.acc = 0;
-          localStorage.setItem('pdl_v5', JSON.stringify(S));
-        }
-      } catch(e) {}
-    });
-  }, 100);
-}
-html>
-;
-        }
-      } catch(e) {}
-    });
+    L.marker([gps.lat, gps.lon], {icon}).addTo(_rmap);
   }, 100);
 }
 

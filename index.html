@@ -230,7 +230,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v13</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v18</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -591,39 +591,44 @@ function load() {
     if (raw) DB = JSON.parse(raw);
   } catch(e) {}
 
-  // 2) Migration depuis pdl_v5 (sondage unique)
-  if (!DB || !DB.sondages) {
-    DB = _newDB();
+  // 2) Migration depuis pdl_v5 si DB inexistant OU vide OU active sans passes
+  const dbEmpty = !DB || !Array.isArray(DB.sondages) || !DB.sondages.length ||
+                  !DB.sondages.some(s => (s.passes||[]).length > 0);
+  if (dbEmpty) {
+    if (!DB || !DB.sondages) DB = _newDB();
     try {
       const oldRaw = localStorage.getItem('pdl_v5');
       if (oldRaw) {
         const old = JSON.parse(oldRaw);
-        DB.chantier  = (old.cfg && old.cfg.chantier) || '';
-        DB.operateur = (old.cfg && old.cfg.operateur) || '';
-        DB.date      = (old.cfg && old.cfg.date) || today();
+        if (!DB.chantier)  DB.chantier  = (old.cfg && old.cfg.chantier) || '';
+        if (!DB.operateur) DB.operateur = (old.cfg && old.cfg.operateur) || '';
+        if (!DB.date)      DB.date      = (old.cfg && old.cfg.date) || today();
         if (old.cfg) {
-          DB.cfg.profMax    = old.cfg.profMax    || 800;
-          DB.cfg.refusSeuil = old.cfg.refusSeuil || 50;
-          DB.cfg.M  = old.cfg.M  || 10;
-          DB.cfg.h  = old.cfg.h  || 0.54;
-          DB.cfg.Mg = old.cfg.Mg || 5.21;
-          DB.cfg.Mt = old.cfg.Mt || 0.59;
-          DB.cfg.Mp = old.cfg.Mp || 0.06;
-          DB.cfg.A  = old.cfg.A  || 4;
-          DB.cfg.Lt = old.cfg.Lt || 0.5;
+          DB.cfg.profMax    = old.cfg.profMax    || DB.cfg.profMax    || 800;
+          DB.cfg.refusSeuil = old.cfg.refusSeuil || DB.cfg.refusSeuil || 50;
+          DB.cfg.M  = old.cfg.M  || DB.cfg.M  || 10;
+          DB.cfg.h  = old.cfg.h  || DB.cfg.h  || 0.54;
+          DB.cfg.Mg = old.cfg.Mg || DB.cfg.Mg || 5.21;
+          DB.cfg.Mt = old.cfg.Mt || DB.cfg.Mt || 0.59;
+          DB.cfg.Mp = old.cfg.Mp || DB.cfg.Mp || 0.06;
+          DB.cfg.A  = old.cfg.A  || DB.cfg.A  || 4;
+          DB.cfg.Lt = old.cfg.Lt || DB.cfg.Lt || 0.5;
         }
-        // Migrer le sondage existant
-        const sondage = _newSondageObj((old.cfg && old.cfg.sondage) || 'P1');
-        sondage.passes       = old.passes || [];
-        sondage.coups        = old.coups  || 0;
-        sondage.tiges        = old.tiges  || 2;
-        sondage.gps          = old.gps    || null;
-        sondage.niveauEau    = (old.niveauEau!==undefined) ? old.niveauEau : null;
-        sondage.cote         = (old.cote!==undefined) ? old.cote : null;
-        sondage.observations = old.observations || '';
-        sondage.photos       = Array.isArray(old.photos) ? old.photos : [];
-        DB.sondages.push(sondage);
-        DB.activeId = sondage.id;
+        if ((old.passes||[]).length > 0) {
+          // Migrer comme nouveau sondage (ajout, pas remplacement)
+          const sondage = _newSondageObj((old.cfg && old.cfg.sondage) || 'P1');
+          sondage.passes       = old.passes || [];
+          sondage.coups        = old.coups  || 0;
+          sondage.tiges        = old.tiges  || 2;
+          sondage.gps          = old.gps    || null;
+          sondage.niveauEau    = (old.niveauEau!==undefined) ? old.niveauEau : null;
+          sondage.cote         = (old.cote!==undefined) ? old.cote : null;
+          sondage.observations = old.observations || '';
+          sondage.photos       = Array.isArray(old.photos) ? old.photos : [];
+          if (!DB.sondages) DB.sondages = [];
+          DB.sondages.push(sondage);
+          DB.activeId = sondage.id;
+        }
       }
     } catch(e) {}
   }
@@ -1316,22 +1321,42 @@ function confirmDeleteSondage(id) {
 
 // ══ PDF GENERATION ════════════════════════════════════════════════════
 function generatePDF() {
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    alert("Bibliothèque PDF non chargée.\nConnectez-vous une fois pour la télécharger.");
+  const validSondages = (DB && DB.sondages || []).filter(x => (x.passes||[]).length > 0);
+  const nbValid = validSondages.length;
+  const activeHasData = S && (S.passes||[]).length > 0;
+
+  if (nbValid === 0) {
+    alert("Aucun sondage ne contient de données.\n\nAjoutez au moins une passe avant de générer un rapport.");
     return;
   }
+
   const choice = prompt(
     "Quel rapport générer ?\n\n" +
-    "1 = Court (1 page : ID + courbe + tableau)\n" +
-    "2 = Complet (avec observations + photos)\n" +
-    "3 = Multi-sondages (synthèse du chantier)\n\n" +
-    "Tapez 1, 2 ou 3 :",
-    "2"
+    "1 = Sondage actuel : " + (S ? S.nom : '—') +
+        (activeHasData ? " (" + S.passes.length + " passes)" : " ⚠ vide") + "\n" +
+    "2 = Multi-sondages : " + nbValid + " sondage(s) avec données\n\n" +
+    "Tapez 1 ou 2 :",
+    activeHasData ? "1" : "2"
   );
   if (!choice) return;
-  if (choice.trim() === '1') return _pdfCourt(S);
-  if (choice.trim() === '2') return _pdfComplet(S);
-  if (choice.trim() === '3') return _pdfMulti();
+  const c = choice.trim();
+
+  if (c === '1') {
+    if (!S || !S.id) { alert('Aucun sondage actif.'); return; }
+    if (!activeHasData) {
+      alert("Le sondage actuel \"" + S.nom + "\" est vide.\n\nBasculez sur un sondage avec données depuis l'onglet Sondages, ou choisissez l'option 2 (Multi-sondages).");
+      return;
+    }
+    save();
+    window.open('rapport.html?id=' + encodeURIComponent(S.id) + '&autosave=1', '_blank');
+    return;
+  }
+
+  if (c === '2') {
+    save();
+    window.open('rapport.html?multi=1&autosave=1', '_blank');
+    return;
+  }
   alert("Choix invalide");
 }
 
@@ -1404,12 +1429,11 @@ function _pdfDrawChart(doc, sondage, x, y, w, h) {
     doc.circle(xS(pt.qd), yS(pt.d), 0.6, 'F');
     doc.text(pt.qd.toFixed(2), xS(pt.qd)+1.5, yS(pt.d)+1);
   });
-  // axis titles
-  doc.setFontSize(7); doc.setTextColor(80);
-  doc.text('qd [MPa] log', x+PL+cw/2, y+h-2, { align:'center' });
-  doc.text('Profondeur [m]', x+2, y+PT+ch/2, { align:'left', angle: 90 });
-  if (showAlt) { doc.setTextColor(15,110,86); doc.text('Altitude [m]', x+w-2, y+PT+ch/2, { align:'right', angle: -90 }); }
-  doc.setTextColor(0); doc.setDrawColor(0); doc.setFillColor(0);
+  // axis titles (sans rotation pour compatibilité)
+  doc.setFontSize(7); doc.setTextColor(80,80,80);
+  doc.text('qd [MPa] log · prof. (m)' + (showAlt ? ' · alt. (m)' : ''), x+PL+cw/2, y+h-2, { align:'center' });
+  // Reset state proprement (blanc pour fill, noir pour texte/lignes)
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
 }
 
 function _pdfTableData(doc, sondage, startY, m, withNotes) {
@@ -1467,8 +1491,10 @@ function _pdfInfoBlock(doc, sondage, m, y) {
 
 function _pdfCourt(sondage) {
   if (!sondage || !(sondage.passes||[]).length) { alert('Aucune donnée à exporter pour ce sondage.'); return; }
+  try {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
   const m = 14;
   _pdfHeader(doc, sondage, m);
   doc.setLineWidth(0.3); doc.setDrawColor(180); doc.line(m, 27, 210-m, 27);
@@ -1492,12 +1518,15 @@ function _pdfCourt(sondage) {
   doc.setFontSize(7); doc.setTextColor(120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
   doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_court.pdf');
+  } catch(e) { alert('Erreur PDF court: ' + e.message); console.error(e); }
 }
 
 function _pdfComplet(sondage) {
   if (!sondage || !(sondage.passes||[]).length) { alert('Aucune donnée à exporter pour ce sondage.'); return; }
+  try {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
   const m = 14;
   _pdfHeader(doc, sondage, m);
   doc.setLineWidth(0.3); doc.setDrawColor(180); doc.line(m, 27, 210-m, 27);
@@ -1557,17 +1586,20 @@ function _pdfComplet(sondage) {
       else { px = m; py += ph + 8; if (py + ph > 280) { doc.addPage(); py = 18; } }
     });
   }
-  doc.setFontSize(7); doc.setTextColor(120);
+  doc.setFontSize(7); doc.setTextColor(120,120,120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
   doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_complet.pdf');
+  } catch(e) { alert('Erreur PDF complet: ' + e.message); console.error(e); }
 }
 
 function _pdfMulti() {
   if (!DB.sondages.length) { alert('Aucun sondage à exporter.'); return; }
   const valid = DB.sondages.filter(s => (s.passes||[]).length > 0);
   if (!valid.length) { alert('Aucun sondage avec des données.'); return; }
+  try {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
   const m = 14;
   // Page de garde
   doc.setFontSize(20); doc.setFont(undefined, 'bold');
@@ -1630,6 +1662,7 @@ function _pdfMulti() {
     doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
   });
   doc.save((DB.chantier || 'chantier').replace(/\s+/g,'_') + '_synthese.pdf');
+  } catch(e) { alert('Erreur PDF multi: ' + e.message); console.error(e); }
 }
 
 // ══ EXPORT EXCEL MULTI-SONDAGES ════════════════════════════════════════
@@ -1717,6 +1750,28 @@ if ('serviceWorker' in navigator) {
   let _reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!_reloaded) { _reloaded = true; window.location.reload(); }
+  });
+}
+load();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.0/dist/jspdf.plugin.autotable.min.js"></script>
+</body>
+</html>
+'controllerchange', () => {
+    if (!_reloaded) { _reloaded = true; window.location.reload(); }
+  });
+}
+load();
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.0/dist/jspdf.plugin.autotable.min.js"></script>
+</body>
+</html>
   });
 }
 load();
