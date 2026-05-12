@@ -230,7 +230,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v18</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v19</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -362,6 +362,7 @@
       <div class="clabel">Résistance de pointe <span class="lc">qd</span> [MPa]</div>
       <div class="chart-wrap" id="chart-wrap"><div class="empty">Aucune donnée</div></div>
     </div>
+    <button class="btn-blue" style="width:100%;margin-bottom:12px;" onclick="exportChartPDF()">📐 Exporter courbe PDF (vectoriel · pour Revit)</button>
     <div class="card">
       <div class="clabel">Paramètres utilisés</div>
       <div id="params-summary" style="font-size:12px;color:var(--text2);line-height:2;"></div>
@@ -971,6 +972,39 @@ function exportData() {
   exportCSV();
 }
 
+// ══ EXPORT COURBE PDF (vectoriel pour Revit) ══════════════════════════
+function exportChartPDF() {
+  if (!S || !(S.passes||[]).length) { alert('Aucune donnée à exporter.'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    alert("Bibliothèque PDF non chargée."); return;
+  }
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+    doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
+    const m = 15;
+    // En-tête minimaliste
+    doc.setFontSize(14); doc.setFont(undefined, 'bold');
+    doc.text('Courbe pénétrométrique', m, 18);
+    doc.setFontSize(10); doc.setFont(undefined, 'normal');
+    doc.text((DB.chantier || 'Chantier non renseigné') + '  ·  ' + (S.nom || 'Sondage'), m, 24);
+    doc.setFontSize(8); doc.setTextColor(100,100,100);
+    doc.text('Date : ' + (DB.date || '—') + '  ·  Opérateur : ' + (DB.operateur || '—'), m, 29);
+    doc.setTextColor(0,0,0);
+    // Chart vectoriel haute qualité — A4 portrait avec marges
+    // Zone : x=15, y=35, w=180, h=240 (mm)
+    _pdfDrawChart(doc, S, m, 35, 210 - 2*m, 240);
+    // Pied de page
+    doc.setFontSize(7); doc.setTextColor(120,120,120);
+    doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 285);
+    doc.text('Vectoriel — insérable dans Revit/CAD', 210 - m, 285, { align: 'right' });
+    doc.save((S.nom || 'PDL') + '_courbe.pdf');
+  } catch(e) {
+    alert('Erreur PDF courbe : ' + e.message);
+    console.error(e);
+  }
+}
+
 function exportXLSX() {
   if (!S.passes.length) { alert('Aucune donnée à exporter.'); return; }
   const c = S.cfg;
@@ -1175,9 +1209,11 @@ function renderChart() {
   const wrap=document.getElementById('chart-wrap');
   const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
   if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
-  const minQd=Math.max(0.01,Math.min(...pts.map(x=>x.qd))*0.5);
-  const maxQd=Math.max(...pts.map(x=>x.qd))*2;
-  const minD=Math.min(...pts.map(x=>x.d)), totalD=Math.abs(minD)||1;
+  // Échelles FIXES : Y de 0 à -5 m (ou plus profond si dépasse), X de 0.1 à 100 MPa
+  const minQd = 0.1;
+  const maxQd = 100;
+  const minD = Math.min(-5, ...pts.map(x=>x.d));
+  const totalD = Math.abs(minD);
   const cote = (S.cote !== null && S.cote !== undefined) ? parseFloat(S.cote) : NaN;
   const showAlt = !isNaN(cote);
   const PL=55,PR=showAlt?52:16,PT=20,PB=28,W=320,chartW=W-PL-PR;
@@ -1207,15 +1243,17 @@ function renderChart() {
     xL+='<text x="'+x+'" y="'+(H-6)+'" text-anchor="middle" font-size="9" fill="#6B6560">'+lbl+'</text>';
   });
   let yG='',yL='',yL2='';
-  pts.forEach(x=>{
-    const py=yS(x.d).toFixed(1);
+  // Grille Y à intervalles fixes (0.5 m tant que totalD ≤ 5, sinon 1 m)
+  const yStep = totalD <= 5 ? 0.5 : 1;
+  for (let dep = 0; dep >= minD - 0.001; dep -= yStep) {
+    const py=yS(dep).toFixed(1);
     yG+='<line x1="'+PL+'" y1="'+py+'" x2="'+(PL+chartW)+'" y2="'+py+'" stroke="#EAE8E4" stroke-width="0.5"/>';
-    yL+='<text x="'+(PL-4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#6B6560">'+x.d.toFixed(1)+'</text>';
+    yL+='<text x="'+(PL-4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#6B6560">'+dep.toFixed(1)+'</text>';
     if (showAlt) {
-      const alt = (cote + x.d).toFixed(2);
+      const alt = (cote + dep).toFixed(2);
       yL2+='<text x="'+(PL+chartW+4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="start" font-size="9" fill="#0F6E56">'+alt+'</text>';
     }
-  });
+  }
   const rightAxis = showAlt
     ? '<line x1="'+(PL+chartW)+'" y1="'+PT+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#0F6E56" stroke-width="1"/>'+
       '<text transform="rotate(90,'+(W-4)+','+(PT+chartH/2)+')" x="'+(W-4)+'" y="'+(PT+chartH/2)+'" text-anchor="middle" font-size="9" fill="#0F6E56">Altitude [m]</text>'
@@ -1383,9 +1421,11 @@ function _pdfDrawChart(doc, sondage, x, y, w, h) {
   const showAlt = !isNaN(cote);
   const PL = 18, PR = showAlt ? 18 : 6, PT = 6, PB = 14;
   const cw = w - PL - PR, ch = h - PT - PB;
-  const minQd = Math.max(0.01, Math.min(...pts.map(x=>x.qd))*0.5);
-  const maxQd = Math.max(...pts.map(x=>x.qd))*2;
-  const minD = Math.min(...pts.map(x=>x.d)), totalD = Math.abs(minD)||1;
+  // Échelles FIXES : qd 0.1 à 100 MPa, profondeur jusqu'à -5 m minimum
+  const minQd = 0.1;
+  const maxQd = 100;
+  const minD = Math.min(-5, ...pts.map(x=>x.d));
+  const totalD = Math.abs(minD);
   const logMin = Math.log10(minQd), logRange = Math.log10(maxQd) - logMin || 1;
   const xS = v => x + PL + (Math.log10(Math.max(v,minQd)) - logMin) / logRange * cw;
   const yS = d => y + PT + ((0 - d) / totalD) * ch;
@@ -1410,14 +1450,16 @@ function _pdfDrawChart(doc, sondage, x, y, w, h) {
     const lbl = v >= 1 ? v.toFixed(v<10?1:0) : v.toFixed(2);
     doc.text(lbl, xc, y+PT+ch+3, { align:'center' });
   });
-  // grid Y
-  pts.forEach(pt => {
-    const py = yS(pt.d);
-    doc.setDrawColor(232); doc.line(x+PL, py, x+PL+cw, py);
+  // grid Y à intervalles fixes (0.5 m si totalD ≤ 5, sinon 1 m)
+  const yStep = totalD <= 5 ? 0.5 : 1;
+  doc.setDrawColor(232); doc.setTextColor(110);
+  for (let dep = 0; dep >= minD - 0.001; dep -= yStep) {
+    const py = yS(dep);
+    doc.line(x+PL, py, x+PL+cw, py);
     doc.setTextColor(110);
-    doc.text(pt.d.toFixed(2), x+PL-1, py+1, { align:'right' });
-    if (showAlt) { doc.setTextColor(15,110,86); doc.text((cote+pt.d).toFixed(2), x+PL+cw+1, py+1); }
-  });
+    doc.text(dep.toFixed(1), x+PL-1, py+1, { align:'right' });
+    if (showAlt) { doc.setTextColor(15,110,86); doc.text((cote+dep).toFixed(2), x+PL+cw+1, py+1); }
+  }
   // path
   doc.setDrawColor(24,95,165); doc.setLineWidth(0.5);
   for (let i=1;i<pts.length;i++) {
@@ -1731,12 +1773,11 @@ function exportAllExcel() {
   const filename = ((DB.chantier||'chantier').replace(/\s+/g,'_')) + '_' + (DB.date||today()) + '.xlsx';
   XLSX.writeFile(wb, filename);
 }
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then(reg => {
-    // Check for updates on every page load and on focus
     if (reg.update) reg.update();
     window.addEventListener('focus', () => { try { reg.update(); } catch(e){} });
-    // When a new worker is found, install it and ask it to skip waiting
     reg.addEventListener('updatefound', () => {
       const newW = reg.installing;
       if (newW) newW.addEventListener('statechange', () => {
@@ -1746,7 +1787,6 @@ if ('serviceWorker' in navigator) {
       });
     });
   }).catch(()=>{});
-  // Auto-reload once when a new SW takes control
   let _reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!_reloaded) { _reloaded = true; window.location.reload(); }

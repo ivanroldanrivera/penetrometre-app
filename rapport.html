@@ -652,10 +652,11 @@ function renderChart(passes, cfg) {
     return;
   }
 
-  const minQd = Math.max(0.01, Math.min(...pts.map(x=>x.qd)) * 0.5);
-  const maxQd = Math.max(...pts.map(x=>x.qd)) * 2;
-  const minD  = Math.min(...pts.map(x=>x.d));
-  const totalD = Math.abs(minD) || 1;
+  // Échelles FIXES : qd 0.1 à 100 MPa, profondeur jusqu'à -5 m (ou plus profond si dépasse)
+  const minQd = 0.1;
+  const maxQd = 100;
+  const minD  = Math.min(-5, ...pts.map(x=>x.d));
+  const totalD = Math.abs(minD);
 
   const cote = (window._S && window._S.cote !== null && window._S.cote !== undefined) ? parseFloat(window._S.cote) : NaN;
   const showAlt = !isNaN(cote);
@@ -693,15 +694,17 @@ function renderChart(passes, cfg) {
   });
 
   let yG='', yL='', yL2='';
-  pts.forEach(x=>{
-    const py=yS(x.d).toFixed(1);
+  // Grille Y à intervalles fixes : 0.5 m si totalD ≤ 5, sinon 1 m
+  const yStep = totalD <= 5 ? 0.5 : 1;
+  for (let dep = 0; dep >= minD - 0.001; dep -= yStep) {
+    const py=yS(dep).toFixed(1);
     yG+=`<line x1="${PL}" y1="${py}" x2="${W-PR}" y2="${py}" stroke="#E8E4DE" stroke-width="0.5" stroke-dasharray="2,2"/>`;
-    yL+=`<text x="${PL-3}" y="${(parseFloat(py)+3).toFixed(1)}" text-anchor="end" font-size="7" fill="#8A8580">${x.d.toFixed(2)}</text>`;
+    yL+=`<text x="${PL-3}" y="${(parseFloat(py)+3).toFixed(1)}" text-anchor="end" font-size="7" fill="#8A8580">${dep.toFixed(2)}</text>`;
     if (showAlt) {
-      const alt = (cote + x.d).toFixed(2);
+      const alt = (cote + dep).toFixed(2);
       yL2+=`<text x="${(W-PR+3)}" y="${(parseFloat(py)+3).toFixed(1)}" text-anchor="start" font-size="7" fill="#0F6E56">${alt}</text>`;
     }
-  });
+  }
   const rightAxis = showAlt
     ? `<line x1="${W-PR}" y1="${PT}" x2="${W-PR}" y2="${PT+chartH}" stroke="#0F6E56" stroke-width="0.8"/>`+
       `<text transform="rotate(90,${W-4},${PT+chartH/2})" x="${W-4}" y="${PT+chartH/2}" text-anchor="middle" font-size="7" fill="#0F6E56">Altitude [m]</text>`
