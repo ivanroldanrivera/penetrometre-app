@@ -230,7 +230,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v19</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v20</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -983,21 +983,12 @@ function exportChartPDF() {
     const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
     doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
     const m = 15;
-    // En-tête minimaliste
-    doc.setFontSize(14); doc.setFont(undefined, 'bold');
-    doc.text('Courbe pénétrométrique', m, 18);
-    doc.setFontSize(10); doc.setFont(undefined, 'normal');
-    doc.text((DB.chantier || 'Chantier non renseigné') + '  ·  ' + (S.nom || 'Sondage'), m, 24);
-    doc.setFontSize(8); doc.setTextColor(100,100,100);
-    doc.text('Date : ' + (DB.date || '—') + '  ·  Opérateur : ' + (DB.operateur || '—'), m, 29);
-    doc.setTextColor(0,0,0);
-    // Chart vectoriel haute qualité — A4 portrait avec marges
-    // Zone : x=15, y=35, w=180, h=240 (mm)
-    _pdfDrawChart(doc, S, m, 35, 210 - 2*m, 240);
-    // Pied de page
-    doc.setFontSize(7); doc.setTextColor(120,120,120);
-    doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 285);
-    doc.text('Vectoriel — insérable dans Revit/CAD', 210 - m, 285, { align: 'right' });
+    // Titre centré : uniquement le nom du sondage
+    doc.setFontSize(16); doc.setFont(undefined, 'bold');
+    doc.text(S.nom || 'Sondage', 105, 18, { align: 'center' });
+    doc.setFont(undefined, 'normal');
+    // Courbe occupant presque toute la page
+    _pdfDrawChart(doc, S, m, 25, 210 - 2*m, 265);
     doc.save((S.nom || 'PDL') + '_courbe.pdf');
   } catch(e) {
     alert('Erreur PDF courbe : ' + e.message);
@@ -1471,10 +1462,17 @@ function _pdfDrawChart(doc, sondage, x, y, w, h) {
     doc.circle(xS(pt.qd), yS(pt.d), 0.6, 'F');
     doc.text(pt.qd.toFixed(2), xS(pt.qd)+1.5, yS(pt.d)+1);
   });
-  // axis titles (sans rotation pour compatibilité)
-  doc.setFontSize(7); doc.setTextColor(80,80,80);
-  doc.text('qd [MPa] log · prof. (m)' + (showAlt ? ' · alt. (m)' : ''), x+PL+cw/2, y+h-2, { align:'center' });
-  // Reset state proprement (blanc pour fill, noir pour texte/lignes)
+  // Titres d'axes proprement positionnés
+  doc.setFontSize(8); doc.setTextColor(60,60,60);
+  // X axis : "qd [MPa]" centré sous l'axe (en plus des chiffres déjà placés)
+  doc.text('qd [MPa]', x+PL+cw/2, y+h-1, { align:'center' });
+  // Y axis : "Profondeur [m]" vertical à gauche, rotation 90°
+  doc.text('Profondeur [m]', x+3, y+PT+ch/2, { angle: 90, align: 'center' });
+  if (showAlt) {
+    doc.setTextColor(15,110,86);
+    doc.text('Altitude [m]', x+w-3, y+PT+ch/2, { angle: -90, align: 'center' });
+  }
+  // Reset state proprement
   doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
 }
 
