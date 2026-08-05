@@ -363,44 +363,63 @@ function _sondageToS(sondage, DB) {
   };
 }
 
+// Rend le rapport à partir d'un objet "chantier" (chantier + operateur + date + cfg + sondages)
+// Retourne true si un rapport a effectivement été affiché, false sinon.
+function _reportFromChantierDB(DB, params) {
+  window._DB = DB;
+  // Mode multi : tous les sondages
+  if (params.get('multi') === '1') {
+    const valid = (DB.sondages || []).filter(s => (s.passes||[]).length > 0);
+    if (!valid.length) { alert('Aucun sondage avec des données.'); return true; }
+    // Afficher le premier pour avoir un aperçu
+    const first = valid[0];
+    window._currentSondage = first.nom || '';
+    renderReport(_sondageToS(first, DB));
+    // Indiquer mode multi dans le bouton
+    const btn = document.getElementById('btn-savepdf');
+    if (btn) btn.textContent = '📥 PDF (' + valid.length + ' sondages)';
+    if (params.get('autosave') === '1') {
+      setTimeout(() => savePDFMulti(DB, valid), 2000);
+    }
+    return true;
+  }
+  // Mode simple : un seul sondage
+  const wantId = params.get('id') || DB.activeId;
+  const sondage = (DB.sondages || []).find(s => s.id === wantId) || (DB.sondages || [])[0];
+  if (sondage) {
+    window._currentSondage = sondage.nom || '';
+    renderReport(_sondageToS(sondage, DB));
+    if (params.get('autosave') === '1') {
+      setTimeout(savePDF, 2000);
+    }
+    return true;
+  }
+  return false;
+}
+
 function loadFromStorage() {
   const params = new URLSearchParams(window.location.search);
-  // Tenter le format multi-sondages pdl_v7
+
+  // 1) Nouveau format pdl_v8 (multi-chantiers) → utilise le chantier actif
+  try {
+    const raw8 = localStorage.getItem('pdl_v8');
+    if (raw8) {
+      const APP = JSON.parse(raw8);
+      const DB = (APP.chantiers || []).find(c => c.id === APP.activeChantierId) || (APP.chantiers || [])[0];
+      if (DB && _reportFromChantierDB(DB, params)) return;
+    }
+  } catch(e) { console.error(e); }
+
+  // 2) Ancien format pdl_v7 (un seul chantier, multi-sondages)
   try {
     const raw7 = localStorage.getItem('pdl_v7');
     if (raw7) {
       const DB = JSON.parse(raw7);
-      window._DB = DB;
-      // Mode multi : tous les sondages
-      if (params.get('multi') === '1') {
-        const valid = (DB.sondages || []).filter(s => (s.passes||[]).length > 0);
-        if (!valid.length) { alert('Aucun sondage avec des données.'); return; }
-        // Afficher le premier pour avoir un aperçu
-        const first = valid[0];
-        window._currentSondage = first.nom || '';
-        renderReport(_sondageToS(first, DB));
-        // Indiquer mode multi dans le bouton
-        const btn = document.getElementById('btn-savepdf');
-        if (btn) btn.textContent = '📥 PDF (' + valid.length + ' sondages)';
-        if (params.get('autosave') === '1') {
-          setTimeout(() => savePDFMulti(DB, valid), 2000);
-        }
-        return;
-      }
-      // Mode simple : un seul sondage
-      const wantId = params.get('id') || DB.activeId;
-      const sondage = (DB.sondages || []).find(s => s.id === wantId) || (DB.sondages || [])[0];
-      if (sondage) {
-        window._currentSondage = sondage.nom || '';
-        renderReport(_sondageToS(sondage, DB));
-        if (params.get('autosave') === '1') {
-          setTimeout(savePDF, 2000);
-        }
-        return;
-      }
+      if (DB && _reportFromChantierDB(DB, params)) return;
     }
   } catch(e) { console.error(e); }
-  // Fallback : ancien format pdl_v5
+
+  // 3) Fallback : ancien format pdl_v5
   try {
     const raw = localStorage.getItem('pdl_v5');
     if (!raw) { alert('Aucune donnée PDL trouvée.\nOuvrez d\'abord l\'application PDL et effectuez un sondage.'); return; }
@@ -409,6 +428,27 @@ function loadFromStorage() {
   } catch(e) {
     alert('Erreur lors du chargement : ' + e.message);
   }
+}
+
+// ── PARTAGE / TÉLÉCHARGEMENT iOS-friendly ───────────────────────────
+async function _shareOrDownload(blob, filename, mime) {
+  try {
+    if (navigator.canShare && navigator.share) {
+      const file = new File([blob], filename, { type: mime });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return true;
+      }
+    }
+  } catch(e) {
+    if (e && e.name === 'AbortError') return false;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { try { document.body.removeChild(a); } catch(e){} URL.revokeObjectURL(url); }, 300);
+  return true;
 }
 
 // ── SAVE PAGE AS PDF (html2canvas + jsPDF) ──────────────────────────
@@ -451,12 +491,13 @@ async function savePDF() {
     }
     const c = window._reportCfg || {};
     const fname = (c.sondage || 'PDL') + '_' + (c.date || '') + '.pdf';
-    pdf.save(fname);
+    const blob = pdf.output('blob');
+    await _shareOrDownload(blob, fname, 'application/pdf');
     if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
     // Si autosave, fermer la fenêtre après quelques secondes
     const params = new URLSearchParams(window.location.search);
     if (params.get('autosave') === '1') {
-      setTimeout(() => { try { window.close(); } catch(e) {} }, 1500);
+      setTimeout(() => { try { window.close(); } catch(e) {} }, 2500);
     }
   } catch(e) {
     alert('Erreur PDF : ' + e.message);
@@ -504,11 +545,12 @@ async function savePDFMulti(DB, valid) {
       }
     }
     const fname = ((DB.chantier || 'chantier').replace(/\s+/g,'_')) + '_' + (DB.date || '') + '_multi.pdf';
-    pdf.save(fname);
+    const blob = pdf.output('blob');
+    await _shareOrDownload(blob, fname, 'application/pdf');
     if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
     const params = new URLSearchParams(window.location.search);
     if (params.get('autosave') === '1') {
-      setTimeout(() => { try { window.close(); } catch(e) {} }, 1500);
+      setTimeout(() => { try { window.close(); } catch(e) {} }, 2500);
     }
   } catch(e) {
     alert('Erreur PDF multi : ' + e.message);
@@ -707,7 +749,7 @@ function renderChart(passes, cfg) {
   }
   const rightAxis = showAlt
     ? `<line x1="${W-PR}" y1="${PT}" x2="${W-PR}" y2="${PT+chartH}" stroke="#0F6E56" stroke-width="0.8"/>`+
-      `<text transform="rotate(90,${W-4},${PT+chartH/2})" x="${W-4}" y="${PT+chartH/2}" text-anchor="middle" font-size="7" fill="#0F6E56">Altitude [m]</text>`
+      `<text transform="rotate(90,${W-4},${PT+chartH/2})" x="${W-4}" y="${PT+chartH/2}" text-anchor="middle" font-size="7" fill="#0F6E56">Altimétrie [m]</text>`
     : '';
 
   wrap.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg">

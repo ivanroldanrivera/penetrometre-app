@@ -230,7 +230,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v20</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v23</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -241,7 +241,7 @@
     <button class="tab active" onclick="showTab('saisie')">Saisie</button>
     <button class="tab" onclick="showTab('donnees')">Données</button>
     <button class="tab" onclick="showTab('graphique')">Courbe</button>
-    <button class="tab" onclick="showTab('sondages')">Sondages</button>
+    <button class="tab" onclick="showTab('sondages')">Chantier</button>
     <button class="tab" onclick="showTab('config')">Config</button>
   </div>
 
@@ -369,10 +369,18 @@
     </div>
   </div>
 
-  <!-- ══ SONDAGES ══ -->
+  <!-- ══ SONDAGES / CHANTIER ══ -->
   <div id="tab-sondages" class="hidden">
     <div class="card">
-      <div class="clabel">Chantier</div>
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Mes chantiers</div>
+        <button class="sort-btn" onclick="promptNewChantier()" style="background:var(--blue);color:#fff;border-color:var(--blue);">+ Nouveau</button>
+      </div>
+      <div class="edit-hint">Toucher un chantier pour basculer · 🗑 pour supprimer</div>
+      <div id="chantiers-list"></div>
+    </div>
+    <div class="card">
+      <div class="clabel">Chantier actif</div>
       <div class="irow"><label>Nom</label>     <input type="text" id="chant-input" placeholder="Nom du chantier" autocomplete="off" onchange="saveChantier()"/></div>
       <div class="irow"><label>Opérateur</label><input type="text" id="chant-operateur" placeholder="Nom de l'opérateur" autocomplete="off" onchange="saveChantier()"/></div>
       <div class="irow"><label>Date</label>    <input type="date" id="chant-date" onchange="saveChantier()"/></div>
@@ -384,6 +392,15 @@
       </div>
       <div class="edit-hint">Toucher un sondage pour basculer · 🗑 pour supprimer</div>
       <div id="sondages-list"></div>
+    </div>
+    <div class="card">
+      <div class="clabel">Vue d'ensemble — tous les essais</div>
+      <div id="chantier-map-placeholder" style="height:100px;display:flex;align-items:center;justify-content:center;color:#6B6560;font-size:13px;background:#ECEAE5;border-radius:9px;border:0.5px solid #D6D2CA;">📍 Aucune coordonnée GPS enregistrée pour ce chantier</div>
+      <div id="chantier-map" style="display:none;height:260px;width:100%;border-radius:9px;overflow:hidden;"></div>
+    </div>
+    <div class="card">
+      <div class="clabel">Photos du chantier</div>
+      <div id="chantier-photos-grid" class="photos-grid"><div class="empty">Aucune photo</div></div>
     </div>
     <div class="data-btns">
       <button class="btn-blue" onclick="exportAllExcel()">⬇ Excel (chantier complet)</button>
@@ -490,7 +507,9 @@
 
 <script>
 // ══ STATE ══════════════════════════════════════════════════════════════
-// DB = base de données complète : chantier + tous les sondages + paramètres
+// APP = conteneur racine : liste de tous les chantiers + chantier actif
+let APP = null;
+// DB = chantier actif (objet dans APP.chantiers) : nom + opérateur + date + cfg + tous ses sondages
 let DB = null;
 // S = pointeur vers le sondage actif (objet dans DB.sondages)
 let S = null;
@@ -506,16 +525,27 @@ function _newSondageObj(nom) {
   };
 }
 
-function _newDB() {
+function _newChantierObj(nom) {
   return {
-    chantier: '', operateur: '', date: today(),
+    id: Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    chantier: nom || '', operateur: '', date: today(),
     cfg: {
       profMax: 800, refusSeuil: 50,
       M: 10, h: 0.54, Mg: 5.21, Mt: 0.59, Mp: 0.06, A: 4, Lt: 0.5
     },
     sondages: [],
-    activeId: null
+    activeId: null,
+    ts: new Date().toISOString()
   };
+}
+
+function _newAPP() {
+  return { chantiers: [], activeChantierId: null };
+}
+
+function _activeChantier() {
+  if (!APP || !APP.activeChantierId) return null;
+  return APP.chantiers.find(c => c.id === APP.activeChantierId) || APP.chantiers[0] || null;
 }
 
 function _activeSondage() {
@@ -557,6 +587,16 @@ function _setActive(id) {
   if (S) _wireProxy(S);
 }
 
+function _setActiveChantier(id) {
+  APP.activeChantierId = id;
+  DB = APP.chantiers.find(c => c.id === id) || APP.chantiers[0];
+  if (!DB) return;
+  if (!DB.activeId || !DB.sondages.find(s => s.id === DB.activeId)) {
+    DB.activeId = DB.sondages.length ? DB.sondages[0].id : null;
+  }
+  _setActive(DB.activeId);
+}
+
 function newSondage(nom) {
   if (!nom) {
     // Trouver le numéro suivant en regardant tous les sondages existants
@@ -578,6 +618,23 @@ function deleteSondage(id) {
   }
 }
 
+function newChantier(nom) {
+  if (!nom) nom = 'Chantier ' + (APP.chantiers.length + 1);
+  const chantier = _newChantierObj(nom);
+  APP.chantiers.push(chantier);
+  _setActiveChantier(chantier.id);
+  newSondage('P1');
+  return chantier;
+}
+
+function deleteChantier(id) {
+  APP.chantiers = APP.chantiers.filter(c => c.id !== id);
+  if (APP.activeChantierId === id) {
+    if (APP.chantiers.length) _setActiveChantier(APP.chantiers[0].id);
+    else newChantier('Chantier 1');
+  }
+}
+
 let sortDesc   = false;
 let editIdx    = -1;
 let editTigesTemp = 0;
@@ -586,67 +643,92 @@ let tigesModalTemp = 0;
 function today() { return new Date().toISOString().slice(0,10); }
 
 function load() {
-  // 1) Tenter le nouveau format pdl_v7 (multi-sondages)
+  // 1) Tenter le nouveau format pdl_v8 (multi-chantiers)
   try {
-    const raw = localStorage.getItem('pdl_v7');
-    if (raw) DB = JSON.parse(raw);
+    const raw = localStorage.getItem('pdl_v8');
+    if (raw) APP = JSON.parse(raw);
   } catch(e) {}
 
-  // 2) Migration depuis pdl_v5 si DB inexistant OU vide OU active sans passes
-  const dbEmpty = !DB || !Array.isArray(DB.sondages) || !DB.sondages.length ||
-                  !DB.sondages.some(s => (s.passes||[]).length > 0);
-  if (dbEmpty) {
-    if (!DB || !DB.sondages) DB = _newDB();
+  const appEmpty = !APP || !Array.isArray(APP.chantiers) || !APP.chantiers.length;
+  if (appEmpty) {
+    APP = _newAPP();
+
+    // 2) Migration depuis pdl_v7 (un seul chantier, multi-sondages) → devient le premier chantier
+    let migrated = false;
     try {
-      const oldRaw = localStorage.getItem('pdl_v5');
-      if (oldRaw) {
-        const old = JSON.parse(oldRaw);
-        if (!DB.chantier)  DB.chantier  = (old.cfg && old.cfg.chantier) || '';
-        if (!DB.operateur) DB.operateur = (old.cfg && old.cfg.operateur) || '';
-        if (!DB.date)      DB.date      = (old.cfg && old.cfg.date) || today();
-        if (old.cfg) {
-          DB.cfg.profMax    = old.cfg.profMax    || DB.cfg.profMax    || 800;
-          DB.cfg.refusSeuil = old.cfg.refusSeuil || DB.cfg.refusSeuil || 50;
-          DB.cfg.M  = old.cfg.M  || DB.cfg.M  || 10;
-          DB.cfg.h  = old.cfg.h  || DB.cfg.h  || 0.54;
-          DB.cfg.Mg = old.cfg.Mg || DB.cfg.Mg || 5.21;
-          DB.cfg.Mt = old.cfg.Mt || DB.cfg.Mt || 0.59;
-          DB.cfg.Mp = old.cfg.Mp || DB.cfg.Mp || 0.06;
-          DB.cfg.A  = old.cfg.A  || DB.cfg.A  || 4;
-          DB.cfg.Lt = old.cfg.Lt || DB.cfg.Lt || 0.5;
-        }
-        if ((old.passes||[]).length > 0) {
-          // Migrer comme nouveau sondage (ajout, pas remplacement)
-          const sondage = _newSondageObj((old.cfg && old.cfg.sondage) || 'P1');
-          sondage.passes       = old.passes || [];
-          sondage.coups        = old.coups  || 0;
-          sondage.tiges        = old.tiges  || 2;
-          sondage.gps          = old.gps    || null;
-          sondage.niveauEau    = (old.niveauEau!==undefined) ? old.niveauEau : null;
-          sondage.cote         = (old.cote!==undefined) ? old.cote : null;
-          sondage.observations = old.observations || '';
-          sondage.photos       = Array.isArray(old.photos) ? old.photos : [];
-          if (!DB.sondages) DB.sondages = [];
-          DB.sondages.push(sondage);
-          DB.activeId = sondage.id;
+      const raw7 = localStorage.getItem('pdl_v7');
+      if (raw7) {
+        const old = JSON.parse(raw7);
+        if (old && Array.isArray(old.sondages) && old.sondages.length) {
+          const chantier = _newChantierObj(old.chantier || 'Chantier 1');
+          chantier.operateur = old.operateur || '';
+          chantier.date      = old.date || today();
+          chantier.cfg       = Object.assign(chantier.cfg, old.cfg || {});
+          chantier.sondages  = old.sondages;
+          chantier.activeId  = old.activeId || old.sondages[0].id;
+          APP.chantiers.push(chantier);
+          APP.activeChantierId = chantier.id;
+          migrated = true;
         }
       }
     } catch(e) {}
+
+    // 3) Migration depuis pdl_v5 (format historique, un seul sondage sans chantier)
+    if (!migrated) {
+      try {
+        const oldRaw = localStorage.getItem('pdl_v5');
+        if (oldRaw) {
+          const old = JSON.parse(oldRaw);
+          if ((old.passes||[]).length > 0) {
+            const chantier = _newChantierObj((old.cfg && old.cfg.chantier) || 'Chantier 1');
+            chantier.operateur = (old.cfg && old.cfg.operateur) || '';
+            chantier.date      = (old.cfg && old.cfg.date) || today();
+            if (old.cfg) {
+              chantier.cfg.profMax    = old.cfg.profMax    || chantier.cfg.profMax;
+              chantier.cfg.refusSeuil = old.cfg.refusSeuil || chantier.cfg.refusSeuil;
+              chantier.cfg.M  = old.cfg.M  || chantier.cfg.M;
+              chantier.cfg.h  = old.cfg.h  || chantier.cfg.h;
+              chantier.cfg.Mg = old.cfg.Mg || chantier.cfg.Mg;
+              chantier.cfg.Mt = old.cfg.Mt || chantier.cfg.Mt;
+              chantier.cfg.Mp = old.cfg.Mp || chantier.cfg.Mp;
+              chantier.cfg.A  = old.cfg.A  || chantier.cfg.A;
+              chantier.cfg.Lt = old.cfg.Lt || chantier.cfg.Lt;
+            }
+            const sondage = _newSondageObj((old.cfg && old.cfg.sondage) || 'P1');
+            sondage.passes       = old.passes || [];
+            sondage.coups        = old.coups  || 0;
+            sondage.tiges        = old.tiges  || 2;
+            sondage.gps          = old.gps    || null;
+            sondage.niveauEau    = (old.niveauEau!==undefined) ? old.niveauEau : null;
+            sondage.cote         = (old.cote!==undefined) ? old.cote : null;
+            sondage.observations = old.observations || '';
+            sondage.photos       = Array.isArray(old.photos) ? old.photos : [];
+            chantier.sondages = [sondage];
+            chantier.activeId = sondage.id;
+            APP.chantiers.push(chantier);
+            APP.activeChantierId = chantier.id;
+          }
+        }
+      } catch(e) {}
+    }
   }
 
-  // 3) S'assurer qu'il existe au moins un sondage actif
-  if (!DB.sondages.length) newSondage('P1');
-  if (!DB.activeId || !_activeSondage()) DB.activeId = DB.sondages[0].id;
+  // 4) S'assurer qu'il existe au moins un chantier, avec au moins un sondage actif
+  if (!APP.chantiers.length) newChantier('Chantier 1');
+  if (!APP.activeChantierId || !_activeChantier()) APP.activeChantierId = APP.chantiers[0].id;
 
-  _setActive(DB.activeId);
+  _setActiveChantier(APP.activeChantierId);
+  if (!DB.sondages.length) newSondage('P1');
+  if (!DB.activeId || !_activeSondage()) _setActive(DB.sondages[0].id);
+
   syncFields(); render();
 }
 
 function save() {
   try {
     // Nettoyer les proxies avant sérialisation
-    const dbToSave = JSON.parse(JSON.stringify(DB, (k,v) => k === '_proxied' ? undefined : v));
-    localStorage.setItem('pdl_v7', JSON.stringify(dbToSave));
+    const appToSave = JSON.parse(JSON.stringify(APP, (k,v) => k === '_proxied' ? undefined : v));
+    localStorage.setItem('pdl_v8', JSON.stringify(appToSave));
     document.getElementById('save-status').textContent =
       'Sauvegardé ' + new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   } catch(e) { document.getElementById('save-status').textContent = '⚠ Erreur'; }
@@ -654,6 +736,14 @@ function save() {
 
 function switchSondage(id) {
   _setActive(id);
+  save(); syncFields(); render();
+  showTab('saisie');
+}
+
+function switchChantier(id) {
+  if (!APP || id === APP.activeChantierId) return;
+  _setActiveChantier(id);
+  if (typeof resetMap !== 'undefined') resetMap();
   save(); syncFields(); render();
   showTab('saisie');
 }
@@ -963,6 +1053,37 @@ function renderGPS() {
   } else { dot.className='gps-dot'; co.textContent=''; me.textContent=''; resetMap && resetMap(); }
 }
 
+// ══ HELPER PARTAGE / TÉLÉCHARGEMENT (iOS-friendly) ════════════════════
+// Sur iOS PWA, doc.save() crée un blob URL qui ne se partage pas correctement
+// via WhatsApp/Mail. La Web Share API L2 permet de partager le fichier PDF réel.
+async function _savePdf(doc, filename) {
+  let blob;
+  try { blob = doc.output('blob'); }
+  catch(e) { doc.save(filename); return; }
+  await _shareOrDownload(blob, filename, 'application/pdf');
+}
+async function _shareOrDownload(blob, filename, mime) {
+  // 1) Web Share API niveau 2 (iOS 15+, Android, Edge/Chrome desktop récents)
+  try {
+    if (navigator.canShare && navigator.share) {
+      const file = new File([blob], filename, { type: mime });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      }
+    }
+  } catch(e) {
+    if (e && e.name === 'AbortError') return; // utilisateur a annulé
+    console.warn('share failed, fallback download', e);
+  }
+  // 2) Fallback : téléchargement classique
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.rel = 'noopener';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { try { document.body.removeChild(a); } catch(e){} URL.revokeObjectURL(url); }, 300);
+}
+
 // ══ EXPORT ════════════════════════════════════════════════════════════
 function exportData() {
   if (typeof XLSX !== 'undefined' && XLSX.utils && XLSX.writeFile) {
@@ -989,7 +1110,7 @@ function exportChartPDF() {
     doc.setFont(undefined, 'normal');
     // Courbe occupant presque toute la page
     _pdfDrawChart(doc, S, m, 25, 210 - 2*m, 265);
-    doc.save((S.nom || 'PDL') + '_courbe.pdf');
+    _savePdf(doc, (S.nom || 'PDL') + '_courbe.pdf');
   } catch(e) {
     alert('Erreur PDF courbe : ' + e.message);
     console.error(e);
@@ -1247,7 +1368,7 @@ function renderChart() {
   }
   const rightAxis = showAlt
     ? '<line x1="'+(PL+chartW)+'" y1="'+PT+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#0F6E56" stroke-width="1"/>'+
-      '<text transform="rotate(90,'+(W-4)+','+(PT+chartH/2)+')" x="'+(W-4)+'" y="'+(PT+chartH/2)+'" text-anchor="middle" font-size="9" fill="#0F6E56">Altitude [m]</text>'
+      '<text transform="rotate(90,'+(W-4)+','+(PT+chartH/2)+')" x="'+(W-4)+'" y="'+(PT+chartH/2)+'" text-anchor="middle" font-size="9" fill="#0F6E56">Altimétrie [m]</text>'
     : '';
   wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+
     xG+yG+
@@ -1310,27 +1431,73 @@ function resetMap() {
   if (_map) { _map.remove(); _map = null; _marker = null; }
 }
 
-// ══ SONDAGES TAB ═════════════════════════════════════════════════════
+// ══ SONDAGES TAB (+ gestion chantiers, vue d'ensemble) ═══════════════
 function renderSondagesTab() {
+  renderChantiersList();
+
   const c = document.getElementById('chant-input');     if (c) c.value = DB.chantier;
   const o = document.getElementById('chant-operateur'); if (o) o.value = DB.operateur;
   const d = document.getElementById('chant-date');      if (d) d.value = DB.date;
   const list = document.getElementById('sondages-list');
-  if (!list) return;
-  if (!DB.sondages.length) { list.innerHTML = '<div class="empty">Aucun sondage</div>'; return; }
-  list.innerHTML = DB.sondages.map(s => {
-    const prof = (s.passes||[]).length * 0.10;
-    const ref = (s.passes||[]).some(p=>p.r);
-    const isActive = s.id === DB.activeId;
-    const dateStr = (s.ts||'').slice(0,10);
+  if (list) {
+    if (!DB.sondages.length) { list.innerHTML = '<div class="empty">Aucun sondage</div>'; }
+    else {
+      list.innerHTML = DB.sondages.map(s => {
+        const prof = (s.passes||[]).length * 0.10;
+        const ref = (s.passes||[]).some(p=>p.r);
+        const isActive = s.id === DB.activeId;
+        const dateStr = (s.ts||'').slice(0,10);
+        return '<div class="sondage-row'+(isActive?' active':'')+'">'+
+          '<div class="sondage-row-main" onclick="switchSondage(\''+s.id+'\')">'+
+            '<div class="sondage-nom">'+(s.nom||'—')+(isActive?' <span class="sondage-badge">ACTUEL</span>':'')+'</div>'+
+            '<div class="sondage-meta">'+(s.passes||[]).length+' passes · '+prof.toFixed(2)+' m'+(ref?' · refus':'')+' · '+dateStr+'</div>'+
+          '</div>'+
+          '<button class="sondage-del" onclick="confirmDeleteSondage(\''+s.id+'\')">🗑</button>'+
+        '</div>';
+      }).join('');
+    }
+  }
+
+  renderChantierOverviewMap();
+  renderChantierPhotos();
+}
+
+function renderChantiersList() {
+  const list = document.getElementById('chantiers-list');
+  if (!list || !APP) return;
+  if (!APP.chantiers.length) { list.innerHTML = '<div class="empty">Aucun chantier</div>'; return; }
+  list.innerHTML = APP.chantiers.map(ch => {
+    const nb = (ch.sondages||[]).length;
+    const isActive = ch.id === APP.activeChantierId;
+    const dateStr = ch.date || '';
     return '<div class="sondage-row'+(isActive?' active':'')+'">'+
-      '<div class="sondage-row-main" onclick="switchSondage(\''+s.id+'\')">'+
-        '<div class="sondage-nom">'+(s.nom||'—')+(isActive?' <span class="sondage-badge">ACTUEL</span>':'')+'</div>'+
-        '<div class="sondage-meta">'+(s.passes||[]).length+' passes · '+prof.toFixed(2)+' m'+(ref?' · refus':'')+' · '+dateStr+'</div>'+
+      '<div class="sondage-row-main" onclick="switchChantier(\''+ch.id+'\')">'+
+        '<div class="sondage-nom">'+(ch.chantier||'Chantier sans nom')+(isActive?' <span class="sondage-badge">ACTIF</span>':'')+'</div>'+
+        '<div class="sondage-meta">'+nb+' sondage(s)'+(ch.operateur?' · '+ch.operateur:'')+(dateStr?' · '+dateStr:'')+'</div>'+
       '</div>'+
-      '<button class="sondage-del" onclick="confirmDeleteSondage(\''+s.id+'\')">🗑</button>'+
+      '<button class="sondage-del" onclick="confirmDeleteChantier(\''+ch.id+'\')">🗑</button>'+
     '</div>';
   }).join('');
+}
+
+function promptNewChantier() {
+  const nom = prompt('Nom du nouveau chantier :', '');
+  if (nom === null) return;
+  newChantier(nom.trim());
+  if (typeof resetMap !== 'undefined') resetMap();
+  save(); syncFields(); render();
+  showTab('saisie');
+}
+
+function confirmDeleteChantier(id) {
+  const ch = APP.chantiers.find(c => c.id === id);
+  if (!ch) return;
+  const nb = (ch.sondages||[]).length;
+  if (!confirm('Supprimer le chantier "' + (ch.chantier||'sans nom') + '" ?\n' +
+               nb + ' sondage(s) et toutes leurs photos seront définitivement supprimés.')) return;
+  deleteChantier(id);
+  if (typeof resetMap !== 'undefined') resetMap();
+  save(); syncFields(); render(); renderSondagesTab();
 }
 
 function saveChantier() {
@@ -1346,6 +1513,82 @@ function confirmDeleteSondage(id) {
   if (!confirm('Supprimer le sondage "' + s.nom + '" ?\nCette action est irréversible.')) return;
   deleteSondage(id);
   save(); syncFields(); render(); renderSondagesTab();
+}
+
+// ── Vue d'ensemble : carte multi-essais ────────────────────────────
+let _mapOverview = null;
+let _overviewMarkers = [];
+function renderChantierOverviewMap() {
+  const mapEl = document.getElementById('chantier-map');
+  const placeholder = document.getElementById('chantier-map-placeholder');
+  if (!mapEl || !placeholder) return;
+  const pts = (DB.sondages||[]).filter(s => s.gps && isFinite(s.gps.lat) && isFinite(s.gps.lon));
+  if (!pts.length || typeof L === 'undefined') {
+    mapEl.style.display = 'none';
+    placeholder.style.display = 'flex';
+    if (_mapOverview) { _mapOverview.remove(); _mapOverview = null; }
+    return;
+  }
+  placeholder.style.display = 'none';
+  mapEl.style.display = 'block';
+
+  if (!_mapOverview) {
+    _mapOverview = L.map('chantier-map', { zoomControl: true, attributionControl: true });
+    L.tileLayer(
+      'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+      { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
+    ).addTo(_mapOverview);
+  }
+  _overviewMarkers.forEach(m => _mapOverview.removeLayer(m));
+  _overviewMarkers = [];
+  const bounds = [];
+  pts.forEach(s => {
+    const prof = ((s.passes||[]).length * 0.10).toFixed(2);
+    const icon = L.divIcon({
+      html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
+      iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+    });
+    const marker = L.marker([s.gps.lat, s.gps.lon], { icon })
+      .addTo(_mapOverview)
+      .bindPopup('<strong>' + (s.nom||'—') + '</strong><br>' + prof + ' m');
+    _overviewMarkers.push(marker);
+    bounds.push([s.gps.lat, s.gps.lon]);
+  });
+  if (bounds.length === 1) _mapOverview.setView(bounds[0], 17);
+  else _mapOverview.fitBounds(bounds, { padding: [24, 24] });
+  setTimeout(() => { if (_mapOverview) _mapOverview.invalidateSize(); }, 80);
+}
+
+// ── Vue d'ensemble : galerie photos consolidée ──────────────────────
+let _chantierPhotoIndex = [];
+function renderChantierPhotos() {
+  const grid = document.getElementById('chantier-photos-grid');
+  if (!grid) return;
+  _chantierPhotoIndex = [];
+  (DB.sondages||[]).forEach(s => {
+    (s.photos||[]).forEach(p => _chantierPhotoIndex.push({ sondageNom: s.nom || '—', photo: p }));
+  });
+  if (!_chantierPhotoIndex.length) { grid.innerHTML = '<div class="empty">Aucune photo</div>'; return; }
+  grid.innerHTML = _chantierPhotoIndex.map((entry, i) => {
+    const cap = (entry.photo.caption || '').replace(/"/g, '&quot;');
+    return '<div class="photo-item">' +
+      '<img src="' + entry.photo.dataUrl + '" onclick="viewChantierPhoto(' + i + ')" alt="">' +
+      '<div class="photo-info">' + entry.sondageNom + (cap ? ' · ' + cap : '') + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function viewChantierPhoto(i) {
+  const entry = _chantierPhotoIndex[i];
+  if (!entry) return;
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write(
+    '<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Photo PDL</title></head>' +
+    '<body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;">' +
+    '<img src="' + entry.photo.dataUrl + '" style="max-width:100%;max-height:100vh;display:block;">' +
+    '</body></html>'
+  );
 }
 
 // ══ PDF GENERATION ════════════════════════════════════════════════════
@@ -1462,15 +1705,16 @@ function _pdfDrawChart(doc, sondage, x, y, w, h) {
     doc.circle(xS(pt.qd), yS(pt.d), 0.6, 'F');
     doc.text(pt.qd.toFixed(2), xS(pt.qd)+1.5, yS(pt.d)+1);
   });
-  // Titres d'axes proprement positionnés
+  // Titres d'axes proprement positionnés (accolés à leur axe respectif)
   doc.setFontSize(8); doc.setTextColor(60,60,60);
-  // X axis : "qd [MPa]" centré sous l'axe (en plus des chiffres déjà placés)
+  // X : "qd [MPa]" centré sous l'axe
   doc.text('qd [MPa]', x+PL+cw/2, y+h-1, { align:'center' });
-  // Y axis : "Profondeur [m]" vertical à gauche, rotation 90°
-  doc.text('Profondeur [m]', x+3, y+PT+ch/2, { angle: 90, align: 'center' });
+  // Y gauche : "Profondeur [m]" accolé à l'axe (juste à gauche des valeurs)
+  doc.text('Profondeur [m]', x+PL-9, y+PT+ch/2, { angle: 90, align: 'center' });
   if (showAlt) {
     doc.setTextColor(15,110,86);
-    doc.text('Altitude [m]', x+w-3, y+PT+ch/2, { angle: -90, align: 'center' });
+    // Y droit : "Altimétrie [m]" accolé à l'axe (juste à droite des valeurs)
+    doc.text('Altimétrie [m]', x+PL+cw+9, y+PT+ch/2, { angle: -90, align: 'center' });
   }
   // Reset state proprement
   doc.setTextColor(0,0,0); doc.setDrawColor(0,0,0); doc.setFillColor(255,255,255);
@@ -1557,7 +1801,7 @@ function _pdfCourt(sondage) {
   _pdfDrawChart(doc, sondage, 100, tabY, 100, 200);
   doc.setFontSize(7); doc.setTextColor(120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
-  doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_court.pdf');
+  _savePdf(doc, (sondage.nom||'PDL') + '_' + (DB.date||today()) + '_court.pdf');
   } catch(e) { alert('Erreur PDF court: ' + e.message); console.error(e); }
 }
 
@@ -1628,7 +1872,7 @@ function _pdfComplet(sondage) {
   }
   doc.setFontSize(7); doc.setTextColor(120,120,120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
-  doc.save((sondage.nom||'PDL') + '_' + (DB.date||today()) + '_complet.pdf');
+  _savePdf(doc, (sondage.nom||'PDL') + '_' + (DB.date||today()) + '_complet.pdf');
   } catch(e) { alert('Erreur PDF complet: ' + e.message); console.error(e); }
 }
 
@@ -1701,7 +1945,7 @@ function _pdfMulti() {
     doc.setFontSize(7); doc.setTextColor(120);
     doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
   });
-  doc.save((DB.chantier || 'chantier').replace(/\s+/g,'_') + '_synthese.pdf');
+  _savePdf(doc, (DB.chantier || 'chantier').replace(/\s+/g,'_') + '_synthese.pdf');
   } catch(e) { alert('Erreur PDF multi: ' + e.message); console.error(e); }
 }
 
