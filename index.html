@@ -222,6 +222,25 @@
   /* Note indicator */
   .note-icon { font-size:11px; color:var(--blue); margin-left:4px; }
   .modal-textarea { width:100%; min-height:60px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; margin-bottom:8px; }
+  /* ── COMPTAGE AUDIO ── */
+  .level-wrap { position:relative; height:22px; background:var(--bg2); border:0.5px solid var(--border); border-radius:6px; overflow:hidden; }
+  .level-bar { height:100%; width:0%; background:linear-gradient(90deg,#0F6E56 0%,#0F6E56 45%,#854F0B 72%,#A32D2D 100%); }
+  .level-thr { position:absolute; top:-1px; bottom:-1px; left:30%; width:2px; background:var(--blue); box-shadow:0 0 0 1px rgba(255,255,255,0.6); }
+  .audio-stats { display:flex; justify-content:space-around; align-items:center; margin:10px 0 8px; }
+  .audio-stat { text-align:center; }
+  .audio-stat-val { font-size:26px; font-weight:200; color:var(--blue); line-height:1; }
+  .audio-stat-lbl { font-size:9px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text2); margin-top:3px; }
+  .btn-mic { width:100%; padding:15px; font-size:14px; border:none; border-radius:var(--radius-sm); cursor:pointer; background:var(--blue); color:#fff; letter-spacing:0.03em; }
+  .btn-mic:active { opacity:0.85; }
+  .btn-mic.listening { background:var(--orange); color:#fff; }
+  .btn-mic.paused { background:var(--green); color:#fff; }
+  .btn-mic[disabled] { opacity:0.45; }
+  .audio-chip { font-size:10px; color:var(--text2); background:var(--bg2); padding:3px 9px; border-radius:20px; border:0.5px solid var(--border); }
+  .audio-chip.on  { color:var(--orange); border-color:#FAC775; background:var(--orange-bg); }
+  .audio-chip.pau { color:var(--green); border-color:#9DC96A; background:#EAF3DE; }
+  .cal-msg { font-size:11px; color:var(--text2); margin-top:8px; text-align:center; min-height:28px; line-height:1.4; }
+  .irow input[type=range] { padding:0; background:transparent; border:none; }
+
   #map { height:260px; width:100%; background:#ECEAE5; border-radius:9px; margin-top:12px; overflow:hidden; }
   #map-placeholder { height:100px; display:flex; align-items:center; justify-content:center; color:#6B6560; font-size:13px; background:#ECEAE5; border-radius:9px; margin-top:12px; border:0.5px solid #D6D2CA; }
 </style>
@@ -230,7 +249,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v23</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v24</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -282,6 +301,33 @@
       </div>
       <button class="btn-valider" onclick="validerPasse()">✓ Valider passe (+10 cm)</button>
       <button class="btn-refus"   onclick="marquerRefus()">⚠ Refus</button>
+    </div>
+
+    <!-- ── COMPTAGE AUTOMATIQUE PAR MICRO ── -->
+    <div class="card">
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Comptage auto — micro</div>
+        <span class="audio-chip" id="audio-status">Inactif</span>
+      </div>
+      <div class="level-wrap">
+        <div class="level-bar" id="level-bar"></div>
+        <div class="level-thr" id="level-thr"></div>
+      </div>
+      <div class="audio-stats">
+        <div class="audio-stat">
+          <div class="audio-stat-val" id="audio-count">0</div>
+          <div class="audio-stat-lbl">coups détectés</div>
+        </div>
+        <div class="audio-stat">
+          <div class="audio-stat-val" id="audio-rate">—</div>
+          <div class="audio-stat-lbl">crête / seuil</div>
+        </div>
+      </div>
+      <button class="btn-mic" id="audio-main-btn" onclick="audioToggle()">🎙 Démarrer l'écoute</button>
+      <button class="btn-sm" id="audio-stop-btn" style="width:100%;margin-top:8px;" onclick="audioStop()" disabled>⏹ Arrêter le micro</button>
+      <div style="font-size:10px;color:var(--text2);text-align:center;margin-top:8px;line-height:1.5;" id="audio-hint">
+        Détecte les frappes sur l'enclume et incrémente les coups.<br>Réglages dans l'onglet Config.
+      </div>
     </div>
 
     <div class="card">
@@ -426,6 +472,42 @@
       <div class="irow"><label>Longueur tige (m)</label>        <input type="number" id="cfg-Lt" value="0.5"  step="0.1"/></div>
       <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
+    <div class="card">
+      <div class="clabel">Calibration micro — détection des coups</div>
+      <div class="level-wrap" style="margin-bottom:4px;">
+        <div class="level-bar" id="cal-level-bar"></div>
+        <div class="level-thr" id="cal-level-thr"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text2);margin-bottom:12px;">
+        <span>niveau capté</span><span id="cal-peak-val">—</span>
+      </div>
+
+      <div class="btn-row2">
+        <button class="btn-sm" onclick="calibrateAmbient()">🎚 Bruit ambiant</button>
+        <button class="btn-sm" onclick="calibrateTest()">🔨 Test de frappe</button>
+      </div>
+      <div class="cal-msg" id="cal-msg">Lancez « Bruit ambiant » en silence, puis « Test de frappe » en frappant normalement.</div>
+
+      <div class="modal-sep"></div>
+
+      <div class="irow">
+        <label>Seuil détection</label>
+        <input type="range" id="cfg-aseuil" min="0.02" max="1" step="0.01" oninput="onSeuilInput(this.value)"/>
+        <span id="cfg-aseuil-val" style="font-size:12px;min-width:34px;text-align:right;color:var(--blue);">—</span>
+      </div>
+      <div class="irow"><label>Temps de garde (ms)</label><input type="number" id="cfg-agarde" min="40" max="2000" step="10"/></div>
+      <div class="irow"><label>Filtre passe-haut (Hz)</label><input type="number" id="cfg-ahpf" min="0" max="8000" step="50"/></div>
+      <div class="irow"><label>Gain micro (×)</label><input type="number" id="cfg-again" min="0.1" max="10" step="0.1"/></div>
+      <label class="modal-check"><input type="checkbox" id="cfg-avib"/> Vibration à chaque coup (Android uniquement)</label>
+      <div style="font-size:10px;color:var(--text2);line-height:1.5;margin-top:8px;">
+        <strong>Seuil</strong> : plus bas = plus sensible.<br>
+        <strong>Temps de garde</strong> : délai mini entre 2 coups, évite de compter un rebond deux fois.<br>
+        <strong>Passe-haut</strong> : coupe les basses (vent, moteur, pas). Monter si faux positifs.
+      </div>
+      <button class="btn-save" onclick="saveAudioCfg()">Enregistrer la calibration</button>
+      <button class="btn-sm" style="width:100%;margin-top:8px;" onclick="resetAudioCfg()">↺ Valeurs par défaut</button>
+    </div>
+
     <div class="card">
       <div class="clabel">Limites sondage</div>
       <div class="irow"><label>Prof. max (cm)</label>     <input type="number" id="cfg-profmax" value="800" min="100" step="10"/></div>
@@ -721,10 +803,24 @@ function load() {
   if (!DB.sondages.length) newSondage('P1');
   if (!DB.activeId || !_activeSondage()) _setActive(DB.sondages[0].id);
 
+  audioCfg();                 // garantit la présence de la config micro
   syncFields(); render();
+  syncAudioFields(); _audioUpdateUI();
+}
+
+// Sauvegarde différée : sérialiser toute la base (photos incluses) à chaque coup
+// détecté serait trop lourd. On regroupe les écritures rapprochées.
+let _saveTimer = null;
+function saveDebounced(ms) {
+  if (_saveTimer) clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => { _saveTimer = null; save(); }, ms || 1200);
+}
+function saveFlush() {
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; save(); }
 }
 
 function save() {
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
   try {
     // Nettoyer les proxies avant sérialisation
     const appToSave = JSON.parse(JSON.stringify(APP, (k,v) => k === '_proxied' ? undefined : v));
@@ -735,13 +831,24 @@ function save() {
 }
 
 function switchSondage(id) {
+  _audioPauseOnSwitch();
   _setActive(id);
   save(); syncFields(); render();
   showTab('saisie');
 }
 
+// Changer de sondage/chantier pendant l'écoute compterait les coups sur le
+// mauvais essai : on met le micro en pause, à l'opérateur de le relancer.
+function _audioPauseOnSwitch() {
+  if (typeof _au !== 'undefined' && _au.running && !_au.paused) {
+    _au.paused = true; _au.count = 0;
+    saveFlush(); _audioUpdateUI();
+  }
+}
+
 function switchChantier(id) {
   if (!APP || id === APP.activeChantierId) return;
+  _audioPauseOnSwitch();
   _setActiveChantier(id);
   if (typeof resetMap !== 'undefined') resetMap();
   save(); syncFields(); render();
@@ -769,7 +876,14 @@ function addCoup(d) {
   S.coups = Math.max(0, S.coups + d);
   save(); render();
 }
-function resetCoup() { S.coups = 0; save(); render(); }
+function resetCoup() { S.coups = 0; _audioResetCount(); save(); render(); }
+
+// Le compteur « coups détectés » suit la passe en cours (comme S.coups)
+function _audioResetCount() {
+  if (typeof _au === 'undefined') return;
+  _au.count = 0; _au.armed = true;
+  const ac = document.getElementById('audio-count'); if (ac) ac.textContent = '0';
+}
 function setCoupManual() {
   const v = prompt('Nombre de coups :', S.coups);
   if (v !== null) { const n = parseInt(v); if (!isNaN(n) && n >= 0) { S.coups = n; save(); render(); } }
@@ -778,7 +892,7 @@ function setCoupManual() {
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() });
-  S.coups = 0; save(); render();
+  S.coups = 0; _audioResetCount(); save(); render();
   // Auto-prompt : ouvrir le modal tiges quand depth atteint (n_tiges × Lt) − 0.1 m
   const Lt = S.cfg.Lt || 0.5;
   const thresholdCm = Math.round(S.tiges * Lt * 100 - 10);
@@ -793,7 +907,7 @@ function validerPasse() {
 function marquerRefus() {
   if (!confirm('Marquer un REFUS à ' + depth() + ' cm ?')) return;
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() });
-  S.coups = 0; save(); render();
+  S.coups = 0; _audioResetCount(); save(); render();
 }
 
 // ══ TIGES MODAL (depuis bloc tiges en saisie) ══════════════════════════
@@ -1028,6 +1142,360 @@ function renderPhotos() {
       '</div>';
   }).join('');
 }
+
+// ══ COMPTAGE AUTOMATIQUE PAR MICRO ════════════════════════════════════
+// Principe : la frappe sur l'enclume est un transitoire large bande très bref.
+// On filtre les basses (vent, moteur, pas), on suit la crête d'amplitude et on
+// déclenche sur front montant au-dessus d'un seuil, avec hystérésis (évite de
+// re-déclencher sur la traîne du même coup) + temps de garde (anti-rebond).
+const AUDIO_DEFAULTS = { seuil:0.30, garde:180, hpf:1200, gain:1, vib:false };
+
+function audioCfg() {
+  if (!APP.audioCfg) APP.audioCfg = Object.assign({}, AUDIO_DEFAULTS);
+  for (const k in AUDIO_DEFAULTS) {
+    if (APP.audioCfg[k] === undefined || APP.audioCfg[k] === null) APP.audioCfg[k] = AUDIO_DEFAULTS[k];
+  }
+  return APP.audioCfg;
+}
+
+let _au = {
+  ctx:null, stream:null, src:null, hp:null, proc:null, sink:null, analyser:null, abuf:null,
+  useProc:true, running:false, paused:false, armed:true, lastHit:0,
+  peak:0, disp:0, count:0,
+  mode:'count',            // 'count' | 'ambient' | 'test'
+  calPeak:0, calCount:0, calTimer:null, uiRaf:null
+};
+
+async function audioStart() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert("Micro non disponible sur ce navigateur.\n\nL'app doit être servie en HTTPS (GitHub Pages) — sur iPhone, ouvrez-la depuis l'écran d'accueil.");
+    return false;
+  }
+  try {
+    if (!_au.ctx) _au.ctx = new AC();
+    // iOS : resume() doit partir du geste utilisateur, donc AVANT tout await
+    if (_au.ctx.state === 'suspended') { try { _au.ctx.resume(); } catch(e) {} }
+
+    if (!_au.stream) {
+      _au.stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,   // ces 3 traitements écrasent les transitoires
+          noiseSuppression: false,   // et fausseraient complètement la détection
+          autoGainControl: false,
+          channelCount: 1
+        }
+      });
+    }
+    if (_au.ctx.state === 'suspended') { try { await _au.ctx.resume(); } catch(e) {} }
+
+    if (!_au.src) _audioBuildGraph(); else _audioApplyCfg();
+
+    _au.running = true; _au.paused = false; _au.armed = true;
+    _au.lastHit = 0; _au.count = 0;
+    _audioUILoop();
+    _requestWakeLock();
+    _audioUpdateUI();
+    return true;
+  } catch(e) {
+    let msg = "Impossible d'accéder au micro.";
+    if (e && e.name === 'NotAllowedError')      msg += "\n\nAutorisation refusée. Activez le micro pour ce site dans les réglages.";
+    else if (e && e.name === 'NotFoundError')   msg += "\n\nAucun micro détecté.";
+    else if (e && e.name === 'NotReadableError')msg += "\n\nLe micro est déjà utilisé par une autre app.";
+    else if (e && e.message)                    msg += "\n\n" + e.message;
+    alert(msg);
+    _au.running = false; _audioUpdateUI();
+    return false;
+  }
+}
+
+function _audioBuildGraph() {
+  const c = audioCfg();
+  _au.src = _au.ctx.createMediaStreamSource(_au.stream);
+  _au.hp = _au.ctx.createBiquadFilter();
+  _au.hp.type = 'highpass';
+  _au.hp.frequency.value = Math.max(0, c.hpf);
+  _au.src.connect(_au.hp);
+
+  _au.useProc = typeof _au.ctx.createScriptProcessor === 'function';
+  if (_au.useProc) {
+    // ScriptProcessor : traite tous les échantillons, aucun coup ne passe entre
+    // deux rafraîchissements d'écran (contrairement à une boucle requestAnimationFrame).
+    _au.proc = _au.ctx.createScriptProcessor(1024, 1, 1);
+    _au.proc.onaudioprocess = _audioProcess;
+    _au.sink = _au.ctx.createGain();
+    _au.sink.gain.value = 0;            // sortie muette : pas de larsen
+    _au.hp.connect(_au.proc);
+    _au.proc.connect(_au.sink);
+    _au.sink.connect(_au.ctx.destination);
+  } else {
+    // Repli : détection depuis la boucle d'affichage
+    _au.analyser = _au.ctx.createAnalyser();
+    _au.analyser.fftSize = 1024;
+    _au.abuf = new Float32Array(_au.analyser.fftSize);
+    _au.hp.connect(_au.analyser);
+  }
+}
+
+function _audioApplyCfg() {
+  const c = audioCfg();
+  if (_au.hp) { try { _au.hp.frequency.value = Math.max(0, c.hpf); } catch(e) {} }
+}
+
+function _audioProcess(ev) {
+  if (!_au.running) return;
+  const buf = ev.inputBuffer.getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const v = buf[i] < 0 ? -buf[i] : buf[i];
+    if (v > peak) peak = v;
+  }
+  _audioHandlePeak(peak);
+}
+
+function _audioHandlePeak(rawPeak) {
+  const c = audioCfg();
+  let peak = rawPeak * (c.gain || 1);
+  if (peak > 1) peak = 1;
+  _au.peak = peak;
+  if (peak > _au.disp) _au.disp = peak;
+  if (peak > _au.calPeak) _au.calPeak = peak;
+
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (peak >= c.seuil) {
+    if (_au.armed && (now - _au.lastHit) >= c.garde) {
+      _au.lastHit = now;
+      _au.armed = false;      // désarmé jusqu'à retombée sous l'hystérésis
+      _audioOnHit();
+    }
+  } else if (peak < c.seuil * 0.6) {
+    _au.armed = true;
+  }
+}
+
+function _audioOnHit() {
+  if (_au.mode === 'ambient') return;         // calibration silencieuse : on mesure seulement
+  if (_au.mode === 'test') { _au.calCount++; return; }
+  if (_au.paused) return;
+  if (depth() >= S.cfg.profMax) return;
+  S.coups++;
+  _au.count++;
+  const cv = document.getElementById('coup-val');   if (cv) cv.textContent = S.coups;
+  const ac = document.getElementById('audio-count'); if (ac) ac.textContent = _au.count;
+  const c = audioCfg();
+  if (c.vib && navigator.vibrate) { try { navigator.vibrate(30); } catch(e) {} }
+  saveDebounced(1200);
+}
+
+// ── Boucle d'affichage (vumètre) ──────────────────────────────────────
+function _audioUILoop() {
+  if (_au.uiRaf) return;
+  const loop = () => {
+    if (!_au.running) { _au.uiRaf = null; _audioRenderLevel(); return; }
+    _au.uiRaf = requestAnimationFrame(loop);
+    if (!_au.useProc && _au.analyser) {
+      if (_au.analyser.getFloatTimeDomainData) {
+        _au.analyser.getFloatTimeDomainData(_au.abuf);
+        let peak = 0;
+        for (let i = 0; i < _au.abuf.length; i++) {
+          const v = _au.abuf[i] < 0 ? -_au.abuf[i] : _au.abuf[i];
+          if (v > peak) peak = v;
+        }
+        _audioHandlePeak(peak);
+      } else {
+        const b = new Uint8Array(_au.analyser.fftSize);
+        _au.analyser.getByteTimeDomainData(b);
+        let peak = 0;
+        for (let i = 0; i < b.length; i++) {
+          const v = Math.abs((b[i] - 128) / 128);
+          if (v > peak) peak = v;
+        }
+        _audioHandlePeak(peak);
+      }
+    }
+    _audioRenderLevel();
+  };
+  _au.uiRaf = requestAnimationFrame(loop);
+}
+
+function _audioRenderLevel() {
+  const c = audioCfg();
+  const pct = Math.min(100, Math.round(_au.disp * 100));
+  const thr = Math.min(100, Math.round(c.seuil * 100));
+  const lb = document.getElementById('level-bar');      if (lb) lb.style.width = pct + '%';
+  const cb = document.getElementById('cal-level-bar');  if (cb) cb.style.width = pct + '%';
+  const lt = document.getElementById('level-thr');      if (lt) lt.style.left = thr + '%';
+  const ct = document.getElementById('cal-level-thr');  if (ct) ct.style.left = thr + '%';
+  const cp = document.getElementById('cal-peak-val');   if (cp) cp.textContent = _au.running ? _au.disp.toFixed(3) : '—';
+  const ar = document.getElementById('audio-rate');
+  if (ar) ar.textContent = _au.running ? (_au.disp.toFixed(2) + ' / ' + c.seuil.toFixed(2)) : '—';
+  _au.disp *= 0.90;                 // retombée douce du vumètre
+  if (_au.disp < 0.001) _au.disp = 0;
+}
+
+// ── Contrôles ─────────────────────────────────────────────────────────
+async function audioToggle() {
+  if (!_au.running) {
+    _au.mode = 'count';
+    const btn = document.getElementById('audio-main-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Autorisation micro…'; }
+    await audioStart();
+    _audioUpdateUI();
+    return;
+  }
+  _au.paused = !_au.paused;
+  if (!_au.paused) { _au.armed = true; _au.lastHit = 0; }
+  else saveFlush();
+  _audioUpdateUI();
+}
+
+function audioStop() {
+  _au.running = false; _au.paused = false; _au.mode = 'count';
+  if (_au.calTimer) { clearInterval(_au.calTimer); _au.calTimer = null; }
+  if (_au.uiRaf) { cancelAnimationFrame(_au.uiRaf); _au.uiRaf = null; }
+  try { if (_au.stream) _au.stream.getTracks().forEach(t => t.stop()); } catch(e) {}
+  try {
+    if (_au.proc) { _au.proc.onaudioprocess = null; _au.proc.disconnect(); }
+    if (_au.analyser) _au.analyser.disconnect();
+    if (_au.hp)   _au.hp.disconnect();
+    if (_au.src)  _au.src.disconnect();
+    if (_au.sink) _au.sink.disconnect();
+  } catch(e) {}
+  _au.stream = null; _au.proc = null; _au.analyser = null; _au.hp = null; _au.src = null; _au.sink = null;
+  _au.disp = 0; _au.peak = 0;
+  _releaseWakeLock();
+  saveFlush();
+  _audioRenderLevel();
+  _audioUpdateUI();
+}
+
+function _audioUpdateUI() {
+  const btn  = document.getElementById('audio-main-btn');
+  const stop = document.getElementById('audio-stop-btn');
+  const st   = document.getElementById('audio-status');
+  const ac   = document.getElementById('audio-count');
+  if (ac) ac.textContent = _au.count;
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.remove('listening','paused');
+    if (!_au.running)      { btn.textContent = "🎙 Démarrer l'écoute"; }
+    else if (_au.paused)   { btn.textContent = '▶ Reprendre';  btn.classList.add('paused'); }
+    else                   { btn.textContent = '⏸ Pause';      btn.classList.add('listening'); }
+  }
+  if (stop) stop.disabled = !_au.running;
+  if (st) {
+    st.classList.remove('on','pau');
+    if (!_au.running)    st.textContent = 'Inactif';
+    else if (_au.paused) { st.textContent = '⏸ En pause'; st.classList.add('pau'); }
+    else                 { st.textContent = '● Écoute';   st.classList.add('on'); }
+  }
+}
+
+// ── Calibration ───────────────────────────────────────────────────────
+function calibrateAmbient() { _runCalibration('ambient', 3000); }
+function calibrateTest()    { _runCalibration('test', 10000); }
+
+async function _runCalibration(mode, ms) {
+  const msg = document.getElementById('cal-msg');
+  const wasRunning = _au.running;
+  if (!_au.running) {
+    if (msg) msg.textContent = 'Activation du micro…';
+    const ok = await audioStart();
+    if (!ok) { if (msg) msg.textContent = 'Micro indisponible.'; return; }
+  }
+  _au.mode = mode; _au.calPeak = 0; _au.calCount = 0;
+  const t0 = Date.now();
+  if (_au.calTimer) clearInterval(_au.calTimer);
+  _au.calTimer = setInterval(() => {
+    const left = Math.ceil((ms - (Date.now() - t0)) / 1000);
+    if (left > 0) {
+      if (msg) msg.textContent = (mode === 'ambient'
+        ? '🤫 Mesure du bruit ambiant, ne frappez pas… '
+        : '🔨 Frappez normalement sur l\'enclume… ') + left + ' s';
+      return;
+    }
+    clearInterval(_au.calTimer); _au.calTimer = null;
+    const c = audioCfg();
+    if (mode === 'ambient') {
+      // Seuil = 3× la crête du bruit ambiant, avec une marge plancher
+      const sugg = Math.min(0.95, Math.max(0.05, +(_au.calPeak * 3 + 0.05).toFixed(2)));
+      c.seuil = sugg;
+      if (msg) msg.textContent = 'Bruit ambiant crête : ' + _au.calPeak.toFixed(3) +
+        ' → seuil réglé sur ' + sugg.toFixed(2) + '.\nLancez maintenant un test de frappe.';
+    } else {
+      if (msg) msg.textContent = _au.calCount + ' coup(s) détecté(s) · crête max ' + _au.calPeak.toFixed(3) +
+        (_au.calCount === 0 ? '\n⚠ Aucun coup : baissez le seuil ou montez le gain.' : '\nSi le compte est trop élevé, montez le seuil ou le temps de garde.');
+    }
+    _au.mode = 'count';
+    syncAudioFields();
+    save();
+    if (!wasRunning) audioStop();
+  }, 200);
+}
+
+function onSeuilInput(v) {
+  const c = audioCfg();
+  c.seuil = Math.min(1, Math.max(0.02, parseFloat(v) || AUDIO_DEFAULTS.seuil));
+  const lbl = document.getElementById('cfg-aseuil-val');
+  if (lbl) lbl.textContent = c.seuil.toFixed(2);
+  _audioRenderLevel();
+}
+
+function saveAudioCfg() {
+  const c = audioCfg();
+  const g = id => document.getElementById(id);
+  if (g('cfg-aseuil')) c.seuil = Math.min(1,    Math.max(0.02, parseFloat(g('cfg-aseuil').value) || AUDIO_DEFAULTS.seuil));
+  if (g('cfg-agarde')) c.garde = Math.min(2000, Math.max(40,   parseInt(g('cfg-agarde').value)   || AUDIO_DEFAULTS.garde));
+  if (g('cfg-ahpf'))   c.hpf   = Math.min(8000, Math.max(0,    parseInt(g('cfg-ahpf').value)     || 0));
+  if (g('cfg-again'))  c.gain  = Math.min(10,   Math.max(0.1,  parseFloat(g('cfg-again').value)  || 1));
+  if (g('cfg-avib'))   c.vib   = !!g('cfg-avib').checked;
+  _audioApplyCfg();
+  save(); syncAudioFields();
+  const m = document.getElementById('cal-msg'); if (m) m.textContent = '✓ Calibration enregistrée.';
+}
+
+function resetAudioCfg() {
+  if (!confirm('Rétablir les valeurs de détection par défaut ?')) return;
+  APP.audioCfg = Object.assign({}, AUDIO_DEFAULTS);
+  _audioApplyCfg(); save(); syncAudioFields();
+  const m = document.getElementById('cal-msg'); if (m) m.textContent = 'Valeurs par défaut rétablies.';
+}
+
+function syncAudioFields() {
+  const c = audioCfg();
+  const g = id => document.getElementById(id);
+  if (g('cfg-aseuil'))     g('cfg-aseuil').value = c.seuil;
+  if (g('cfg-aseuil-val')) g('cfg-aseuil-val').textContent = (+c.seuil).toFixed(2);
+  if (g('cfg-agarde'))     g('cfg-agarde').value = c.garde;
+  if (g('cfg-ahpf'))       g('cfg-ahpf').value   = c.hpf;
+  if (g('cfg-again'))      g('cfg-again').value  = c.gain;
+  if (g('cfg-avib'))       g('cfg-avib').checked = !!c.vib;
+  _audioRenderLevel();
+}
+
+// ── Wake lock : empêcher la veille pendant l'écoute ───────────────────
+let _wakeLock = null;
+async function _requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator && !_wakeLock) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    }
+  } catch(e) {}
+}
+function _releaseWakeLock() {
+  try { if (_wakeLock) { _wakeLock.release(); _wakeLock = null; } } catch(e) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') { saveFlush(); return; }
+  if (!_au.running) return;
+  _requestWakeLock();
+  // iOS suspend l'AudioContext en arrière-plan
+  if (_au.ctx && _au.ctx.state === 'suspended') { try { _au.ctx.resume(); } catch(e) {} }
+  _au.armed = true;
+  _audioUILoop();
+});
 
 // ══ GPS ═══════════════════════════════════════════════════════════════
 function captureGPS() {
@@ -1391,6 +1859,7 @@ function showTab(t){
   document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
   if(t==='graphique') renderChart();
   if(t==='sondages') renderSondagesTab();
+  if(t==='config') syncAudioFields();
 }
 
 // ══ MAP ═══════════════════════════════════════════════════════════════
