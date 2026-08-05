@@ -430,13 +430,31 @@ function loadFromStorage() {
   }
 }
 
+// ── NOMS DE FICHIERS (préfixés par le chantier) ─────────────────────
+function _slug(s) {
+  return (s == null ? '' : String(s))
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9._\- ]/g, '')       // ASCII sur uniquement
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.-]+|[_.-]+$/g, '')
+    .slice(0, 60);
+}
+function exportName(parts, ext) {
+  const clean = (parts || []).map(_slug).filter(p => p.length);
+  return (clean.length ? clean.join('_') : 'PDL') + '.' + ext;
+}
+
 // ── PARTAGE / TÉLÉCHARGEMENT iOS-friendly ───────────────────────────
 async function _shareOrDownload(blob, filename, mime) {
+  // IMPORTANT : ne JAMAIS joindre title/text/url à un partage de fichiers.
+  // iOS privilégie alors le lien et envoie l'URL de la page (GitHub Pages)
+  // au lieu du PDF. Avec { files } seul, c'est bien le fichier qui part.
   try {
     if (navigator.canShare && navigator.share) {
       const file = new File([blob], filename, { type: mime });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: filename });
+        await navigator.share({ files: [file] });
         return true;
       }
     }
@@ -490,7 +508,7 @@ async function savePDF() {
       }
     }
     const c = window._reportCfg || {};
-    const fname = (c.sondage || 'PDL') + '_' + (c.date || '') + '.pdf';
+    const fname = exportName([c.chantier, c.sondage, c.date], 'pdf');
     const blob = pdf.output('blob');
     await _shareOrDownload(blob, fname, 'application/pdf');
     if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }
@@ -544,7 +562,7 @@ async function savePDFMulti(DB, valid) {
         }
       }
     }
-    const fname = ((DB.chantier || 'chantier').replace(/\s+/g,'_')) + '_' + (DB.date || '') + '_multi.pdf';
+    const fname = exportName([DB.chantier, DB.date, 'synthese'], 'pdf');
     const blob = pdf.output('blob');
     await _shareOrDownload(blob, fname, 'application/pdf');
     if (btn) { btn.disabled = false; btn.textContent = '📥 Télécharger PDF'; }

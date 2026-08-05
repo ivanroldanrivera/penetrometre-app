@@ -249,7 +249,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v24</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v25</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1521,6 +1521,31 @@ function renderGPS() {
   } else { dot.className='gps-dot'; co.textContent=''; me.textContent=''; resetMap && resetMap(); }
 }
 
+// ══ NOMS DE FICHIERS D'EXPORT ═════════════════════════════════════════
+// Tous les exports (PDF et Excel) sont préfixés par le nom du chantier.
+// Les accents et caractères interdits par les systèmes de fichiers sont
+// nettoyés pour que le fichier s'ouvre partout (Windows, iOS, Android).
+function _slug(s) {
+  return (s == null ? '' : String(s))
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')      // accents supprimes
+    .replace(/[^A-Za-z0-9._\- ]/g, '')       // ASCII sur uniquement
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.-]+|[_.-]+$/g, '')
+    .slice(0, 60);
+}
+
+// Construit "Chantier_Sondage_Date_suffixe.ext" en sautant les parties vides
+function exportName(parts, ext) {
+  const clean = (parts || []).map(_slug).filter(p => p.length);
+  return (clean.length ? clean.join('_') : 'PDL') + '.' + ext;
+}
+
+// Nom du chantier actif, assaini (chaîne vide si non renseigné)
+function chantierSlug() {
+  return _slug(DB && DB.chantier ? DB.chantier : '');
+}
+
 // ══ HELPER PARTAGE / TÉLÉCHARGEMENT (iOS-friendly) ════════════════════
 // Sur iOS PWA, doc.save() crée un blob URL qui ne se partage pas correctement
 // via WhatsApp/Mail. La Web Share API L2 permet de partager le fichier PDF réel.
@@ -1532,11 +1557,14 @@ async function _savePdf(doc, filename) {
 }
 async function _shareOrDownload(blob, filename, mime) {
   // 1) Web Share API niveau 2 (iOS 15+, Android, Edge/Chrome desktop récents)
+  //    IMPORTANT : ne JAMAIS joindre title/text/url à un partage de fichiers.
+  //    iOS donne la priorité au lien et envoie l'URL de la page (GitHub Pages)
+  //    au lieu du PDF. Avec { files } seul, c'est bien le fichier qui part.
   try {
     if (navigator.canShare && navigator.share) {
       const file = new File([blob], filename, { type: mime });
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: filename });
+        await navigator.share({ files: [file] });
         return;
       }
     }
@@ -1578,7 +1606,7 @@ function exportChartPDF() {
     doc.setFont(undefined, 'normal');
     // Courbe occupant presque toute la page
     _pdfDrawChart(doc, S, m, 25, 210 - 2*m, 265);
-    _savePdf(doc, (S.nom || 'PDL') + '_courbe.pdf');
+    _savePdf(doc, exportName([chantierSlug(), S.nom, DB.date, 'courbe'], 'pdf'));
   } catch(e) {
     alert('Erreur PDF courbe : ' + e.message);
     console.error(e);
@@ -1646,8 +1674,22 @@ function exportXLSX() {
   XLSX.utils.book_append_sheet(wb, wsInfo, 'Info');
   XLSX.utils.book_append_sheet(wb, wsData, 'Données');
 
-  const filename = (c.sondage || 'PDL') + '_' + (c.date || new Date().toISOString().slice(0,10)) + '.xlsx';
-  XLSX.writeFile(wb, filename);
+  const filename = exportName([chantierSlug(), c.sondage, c.date || today()], 'xlsx');
+  _saveXlsx(wb, filename);
+}
+
+// XLSX.writeFile() force un téléchargement direct qui se comporte mal en PWA iOS
+// (fichier inaccessible). On produit le blob et on passe par la feuille de partage.
+async function _saveXlsx(wb, filename) {
+  try {
+    const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    await _shareOrDownload(blob, filename,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  } catch(e) {
+    console.warn('share xlsx failed, fallback writeFile', e);
+    try { XLSX.writeFile(wb, filename); } catch(e2) { alert('Erreur export Excel : ' + e2.message); }
+  }
 }
 
 function exportCSV() {
@@ -1673,10 +1715,7 @@ function exportCSV() {
     })
   ];
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url; a.download=c.sondage+'_'+c.date+'.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  _shareOrDownload(blob, exportName([chantierSlug(), c.sondage, c.date || today()], 'csv'), 'text/csv');
 }
 
 // ══ CONFIG ════════════════════════════════════════════════════════════
@@ -2270,7 +2309,7 @@ function _pdfCourt(sondage) {
   _pdfDrawChart(doc, sondage, 100, tabY, 100, 200);
   doc.setFontSize(7); doc.setTextColor(120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
-  _savePdf(doc, (sondage.nom||'PDL') + '_' + (DB.date||today()) + '_court.pdf');
+  _savePdf(doc, exportName([chantierSlug(), sondage.nom, DB.date || today(), 'court'], 'pdf'));
   } catch(e) { alert('Erreur PDF court: ' + e.message); console.error(e); }
 }
 
@@ -2341,7 +2380,7 @@ function _pdfComplet(sondage) {
   }
   doc.setFontSize(7); doc.setTextColor(120,120,120);
   doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
-  _savePdf(doc, (sondage.nom||'PDL') + '_' + (DB.date||today()) + '_complet.pdf');
+  _savePdf(doc, exportName([chantierSlug(), sondage.nom, DB.date || today(), 'complet'], 'pdf'));
   } catch(e) { alert('Erreur PDF complet: ' + e.message); console.error(e); }
 }
 
@@ -2414,7 +2453,7 @@ function _pdfMulti() {
     doc.setFontSize(7); doc.setTextColor(120);
     doc.text('qd = résistance dynamique de pointe · Norme PDL NF P 94-115', m, 290);
   });
-  _savePdf(doc, (DB.chantier || 'chantier').replace(/\s+/g,'_') + '_synthese.pdf');
+  _savePdf(doc, exportName([chantierSlug(), DB.date || today(), 'synthese'], 'pdf'));
   } catch(e) { alert('Erreur PDF multi: ' + e.message); console.error(e); }
 }
 
@@ -2481,8 +2520,8 @@ function exportAllExcel() {
     ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},{wch:8},{wch:30},{wch:22}];
     XLSX.utils.book_append_sheet(wb, ws, (s.nom||'Sondage').slice(0,31));
   });
-  const filename = ((DB.chantier||'chantier').replace(/\s+/g,'_')) + '_' + (DB.date||today()) + '.xlsx';
-  XLSX.writeFile(wb, filename);
+  const filename = exportName([chantierSlug(), DB.date || today(), 'chantier'], 'xlsx');
+  _saveXlsx(wb, filename);
 }
 
 if ('serviceWorker' in navigator) {
