@@ -479,6 +479,8 @@ async function savePDF() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Génération…'; }
   try {
     const page = document.getElementById('report-page');
+    // Le fond de carte doit être composé AVANT la capture
+    try { await _mapReady; } catch(e) {}
     // Haute résolution : scale 3 + PNG lossless (poids non limitant)
     const canvas = await html2canvas(page, {
       scale: 3,
@@ -541,8 +543,9 @@ async function savePDFMulti(DB, valid) {
       // Render this sondage
       window._currentSondage = s.nom || '';
       renderReport(_sondageToS(s, DB));
-      // Wait for render (map tiles, photos)
-      await new Promise(r => setTimeout(r, 1200));
+      // Attendre la composition du fond de carte, puis le rendu des photos
+      try { await _mapReady; } catch(e) {}
+      await new Promise(r => setTimeout(r, 400));
       // Capture
       const canvas = await html2canvas(page, {
         scale: 3, useCORS: true, allowTaint: false, logging: false,
@@ -784,41 +787,188 @@ function renderChart(passes, cfg) {
 }
 
 // ── MAP ───────────────────────────────────────────────────────────────
-let _rmap = null;
-function renderMap(gps) {
-  const mapDiv  = document.getElementById('report-map');
-  const display = document.getElementById('gps-display');
+// Leaflet insère les tuiles comme <img> distantes sans attribut crossOrigin.
+// html2canvas ne peut pas dessiner ces images sur un canvas propre : il les
+// ignore, d'où un PDF avec le marqueur (simple div HTML) mais sans fond de
+// carte. On compose donc nous-mêmes l'image : fetch → dataURL → canvas.
+// Une image en dataURL est de même origine, donc toujours capturable.
 
+const _TILE_SIZE = 256;
+const _MAX_Z = 19;                      // zoom natif max des orthophotos IGN
+
+function _tileUrl(z, x, y) {
+  return 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+         '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
+         '&TILEMATRIXSET=PM&TILEMATRIX=' + z + '&TILEROW=' + y + '&TILECOL=' + x;
+}
+
+// Projection Web Mercator → pixels monde
+function _lon2px(lon, z) {
+  return (lon + 180) / 360 * Math.pow(2, z) * _TILE_SIZE;
+}
+function _lat2px(lat, z) {
+  const r = Math.max(-85.05112878, Math.min(85.05112878, lat)) * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z) * _TILE_SIZE;
+}
+function _metersPerPx(lat, z) {
+  return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z);
+}
+
+// Récupère une tuile en dataURL. Le contrôle de taille attrape le cas d'une
+// réponse opaque servie par le service worker (blob vide → image cassée).
+function _fetchTile(url) {
+  return fetch(url, { mode: 'cors', credentials: 'omit' })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+    .then(b => {
+      if (!b || !b.size) throw new Error('tuile vide');
+      return new Promise((res, rej) => {
+        const fr = new FileReader();
+        fr.onload  = () => res(fr.result);
+        fr.onerror = () => rej(new Error('lecture tuile'));
+        fr.readAsDataURL(b);
+      });
+    })
+    .then(durl => new Promise((res, rej) => {
+      const im = new Image();
+      im.onload  = () => res(im);
+      im.onerror = () => rej(new Error('décodage tuile'));
+      im.src = durl;
+    }));
+}
+
+async function buildStaticMap(points, W, H) {
+  if (!points || !points.length) throw new Error('aucun point');
+  const lats = points.map(p => p.lat), lons = points.map(p => p.lon);
+  const cLat = (Math.min.apply(null, lats) + Math.max.apply(null, lats)) / 2;
+  const cLon = (Math.min.apply(null, lons) + Math.max.apply(null, lons)) / 2;
+
+  // Zoom : le plus détaillé qui contient encore tous les points
+  let z = _MAX_Z;
+  if (points.length > 1) {
+    for (; z > 2; z--) {
+      const dx = Math.abs(_lon2px(Math.max.apply(null, lons), z) - _lon2px(Math.min.apply(null, lons), z));
+      const dy = Math.abs(_lat2px(Math.min.apply(null, lats), z) - _lat2px(Math.max.apply(null, lats), z));
+      if (dx < W * 0.8 && dy < H * 0.8) break;
+    }
+  }
+
+  const ox = _lon2px(cLon, z) - W / 2;
+  const oy = _lat2px(cLat, z) - H / 2;
+
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#E8E4DE';
+  ctx.fillRect(0, 0, W, H);
+
+  const n  = Math.pow(2, z);
+  const x0 = Math.floor(ox / _TILE_SIZE), x1 = Math.floor((ox + W) / _TILE_SIZE);
+  const y0 = Math.floor(oy / _TILE_SIZE), y1 = Math.floor((oy + H) / _TILE_SIZE);
+
+  let loaded = 0;
+  const jobs = [];
+  for (let tx = x0; tx <= x1; tx++) {
+    for (let ty = y0; ty <= y1; ty++) {
+      if (ty < 0 || ty >= n) continue;
+      const wx = ((tx % n) + n) % n;
+      jobs.push(
+        _fetchTile(_tileUrl(z, wx, ty))
+          .then(img => {
+            ctx.drawImage(img, Math.round(tx * _TILE_SIZE - ox), Math.round(ty * _TILE_SIZE - oy), _TILE_SIZE, _TILE_SIZE);
+            loaded++;
+          })
+          .catch(() => { /* tuile manquante : le fond neutre reste visible */ })
+      );
+    }
+  }
+  await Promise.all(jobs);
+  if (!loaded) throw new Error('aucune tuile chargée');
+
+  // Marqueurs
+  const rMark = Math.max(7, Math.round(W / 130));
+  points.forEach(p => {
+    const px = _lon2px(p.lon, z) - ox, py = _lat2px(p.lat, z) - oy;
+    ctx.beginPath();
+    ctx.arc(px, py, rMark, 0, Math.PI * 2);
+    ctx.fillStyle = '#185FA5';
+    ctx.fill();
+    ctx.lineWidth = Math.max(2, rMark * 0.45);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.stroke();
+  });
+
+  // Échelle graphique
+  const mpp = _metersPerPx(cLat, z);
+  const target = W * 0.22 * mpp;
+  const steps = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  let d = steps[0];
+  for (let i = 0; i < steps.length; i++) if (steps[i] <= target) d = steps[i];
+  const barPx = d / mpp;
+  const bx = Math.round(W * 0.04), by = H - Math.round(H * 0.08);
+  const fs = Math.max(11, Math.round(W / 75));
+  ctx.lineWidth = Math.max(3, fs * 0.28);
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = Math.max(1.5, fs * 0.14);
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + barPx, by); ctx.stroke();
+  ctx.font = '600 ' + fs + 'px -apple-system, Helvetica, Arial, sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.lineWidth = Math.max(2, fs * 0.3);
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.strokeText(d + ' m', bx, by - fs * 0.35);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillText(d + ' m', bx, by - fs * 0.35);
+
+  return cv.toDataURL('image/jpeg', 0.9);
+}
+
+let _rmap = null;
+let _mapReady = Promise.resolve();
+
+function renderMap(gps) {
+  const display    = document.getElementById('gps-display');
   const gpsSection = document.getElementById('gps-section');
   if (!gps) {
     if (gpsSection) gpsSection.style.display = 'none';
+    _mapReady = Promise.resolve();
     return;
   }
   if (gpsSection) gpsSection.style.display = 'block';
-  display.textContent = gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6) + (gps.acc > 0 ? '  (± ' + gps.acc + ' m)' : '');
+  if (display) {
+    display.textContent = gps.lat.toFixed(6) + ', ' + gps.lon.toFixed(6) +
+      (gps.acc > 0 ? '  (± ' + gps.acc + ' m)' : '');
+  }
+  _mapReady = _renderMapImage(gps);
+}
 
-  setTimeout(() => {
-    if (_rmap) { _rmap.remove(); _rmap = null; }
-    _rmap = L.map('report-map', { zoomControl:false, attributionControl:true }).setView([gps.lat, gps.lon], 17);
+async function _renderMapImage(gps) {
+  const mapDiv = document.getElementById('report-map');
+  if (!mapDiv) return;
+  if (_rmap) { try { _rmap.remove(); } catch(e) {} _rmap = null; }
 
-    L.tileLayer(
-      'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
-      '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg' +
-      '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-      {
-        attribution: '© IGN Géoportail — Orthophotos',
-        maxZoom: 19,
-        maxNativeZoom: 19,
-        tileSize: 256
-      }
-    ).addTo(_rmap);
+  const note = (txt) =>
+    '<div style="height:100%;display:flex;align-items:center;justify-content:center;' +
+    'font-size:9px;color:#8A8580;text-align:center;padding:4mm;">' + txt + '</div>';
 
-    const icon = L.divIcon({
-      html: '<div style="width:12px;height:12px;background:#185FA5;border:2.5px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.5);"></div>',
-      iconSize:[12,12], iconAnchor:[6,6], className:''
-    });
-    L.marker([gps.lat, gps.lon], {icon}).addTo(_rmap);
-  }, 100);
+  mapDiv.innerHTML = note('Chargement du fond de carte…');
+  await new Promise(r => setTimeout(r, 60));      // laisser le layout se stabiliser
+
+  const rect = mapDiv.getBoundingClientRect();
+  const W = Math.max(600, Math.min(1800, Math.round((rect.width  || 620) * 3)));
+  const H = Math.max(200, Math.min(900,  Math.round((rect.height || 208) * 3)));
+
+  try {
+    const dataUrl = await buildStaticMap([{ lat: gps.lat, lon: gps.lon }], W, H);
+    const im = new Image();
+    im.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:3px;';
+    await new Promise(res => { im.onload = res; im.onerror = res; im.src = dataUrl; });
+    mapDiv.innerHTML = '';
+    mapDiv.appendChild(im);
+  } catch(e) {
+    console.warn('fond de carte indisponible', e);
+    mapDiv.innerHTML = note('Fond de carte indisponible<br>(une connexion est requise au premier rapport)');
+  }
 }
 
 loadFromStorage();

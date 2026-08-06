@@ -249,7 +249,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v25</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v26</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1915,7 +1915,7 @@ function initMap(lat, lon) {
   _map = L.map('map', { zoomControl: true, attributionControl: true }).setView([lat, lon], 18);
   L.tileLayer(
     'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-    { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
+    { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256, crossOrigin: 'anonymous' }
   ).addTo(_map);
   const icon = L.divIcon({
     html: '<div style="width:14px;height:14px;background:#185FA5;border:3px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>',
@@ -2044,7 +2044,7 @@ function renderChantierOverviewMap() {
     _mapOverview = L.map('chantier-map', { zoomControl: true, attributionControl: true });
     L.tileLayer(
       'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-      { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256 }
+      { attribution: '© IGN Géoportail — Orthophotos', maxZoom: 19, maxNativeZoom: 19, tileSize: 256, crossOrigin: 'anonymous' }
     ).addTo(_mapOverview);
   }
   _overviewMarkers.forEach(m => _mapOverview.removeLayer(m));

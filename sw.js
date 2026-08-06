@@ -1,4 +1,4 @@
-const CACHE = 'pdl-v25';
+const CACHE = 'pdl-v26';
 const LOCAL = [
   './',
   './index.html',
@@ -53,14 +53,20 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // Cache-first for everything else
+  // Cache-first for everything else.
+  // Exception : ne jamais servir une réponse opaque (mise en cache par une
+  // requête no-cors) à une requête cors — son corps est illisible (blob vide),
+  // ce qui casserait la composition du fond de carte du rapport PDF.
   e.respondWith(
-    caches.match(req).then(cached => cached || fetch(req).then(r => {
-      if (req.method === 'GET' && r && (r.ok || r.type === 'opaque')) {
-        const clone = r.clone();
-        caches.open(CACHE).then(c => c.put(req, clone)).catch(()=>{});
-      }
-      return r;
-    }).catch(() => cached))
+    caches.match(req).then(cached => {
+      if (cached && req.mode === 'cors' && cached.type === 'opaque') cached = null;
+      return cached || fetch(req).then(r => {
+        if (req.method === 'GET' && r && (r.ok || r.type === 'opaque')) {
+          const clone = r.clone();
+          caches.open(CACHE).then(c => c.put(req, clone)).catch(()=>{});
+        }
+        return r;
+      }).catch(() => cached);
+    })
   );
 });
