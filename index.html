@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v28</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v29</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -634,6 +634,14 @@
 
     <div class="modal-sep"></div>
 
+    <!-- Mesures du capteur (masqué si absentes) -->
+    <div id="modal-mesures" class="hidden">
+      <div class="modal-sep"></div>
+      <div class="modal-section-label">Mesures du capteur</div>
+      <div id="modal-mesures-resume" style="font-size:12px;line-height:1.9;color:var(--text);"></div>
+      <div id="modal-mesures-coups" style="margin-top:8px;"></div>
+    </div>
+
     <!-- Note -->
     <div class="modal-section-label">Note (optionnel)</div>
     <textarea class="modal-textarea" id="modal-note" placeholder="Observation sur cette passe…"></textarea>
@@ -966,29 +974,48 @@ function calcQd(N, n, eMm) {
   } catch(e) { return null; }
 }
 
-// qd d'une passe enregistrée.
-// L'enfoncement mesuré ne remplace les 10 cm nominaux que pour les passes
-// incomplètes (arrêt en cours de passe, refus) : c'est là que l'arrondi à
-// 10 cm fausse réellement le résultat. Les passes complètes restent sur la
-// grille normalisée, pour ne pas injecter l'erreur du capteur partout.
+// ══ DEUX SÉRIES EN PARALLÈLE ══════════════════════════════════════════
+// SÉRIE NORMALISÉE — la référence NF P 94-115 : passes de 10 cm fixes,
+//   qd calculé sur e = 0,10 m. C'est ce qui part dans les rapports et les
+//   courbes. Le capteur ne la modifie JAMAIS.
+// SÉRIE MESURÉE — enfoncement réel relevé par le capteur à fil, e/N réel,
+//   et le qd qui en découle. Elle existe à côté, pour comparaison.
+//
+// Les deux cohabitent : on ne remplace rien, on met en vis-à-vis.
+
+// --- Série normalisée ---
 function qdPasse(p) {
   if (!p) return null;
-  return calcQd(p.c, p.n, (p.part && p.e > 0) ? p.e : 0);
+  return calcQd(p.c, p.n);                       // toujours 10 cm
 }
-
-// Hauteur réelle d'une passe en cm (mesurée si partielle, sinon 10)
-function hauteurPasse(p) {
-  return (p && p.part && p.e > 0) ? (p.e / 10) : 10;
-}
-
-// Profondeur réellement atteinte, en cm.
-// depth() reste le compteur de grille (n × 10 cm) qui positionne les passes
-// et sert de repère normalisé. Cette fonction-ci donne la profondeur vraie,
-// où une dernière passe interrompue à 6,2 cm compte pour 6,2 et non pour 10.
 function profPassesCm(passes) {
-  let t = 0;
-  (passes || []).forEach(p => { t += hauteurPasse(p); });
-  return t;
+  return (passes || []).length * 10;             // grille de la norme
+}
+
+// --- Série mesurée (null si le capteur n'était pas connecté) ---
+function qdMesure(p) {
+  if (!p || !(p.e > 0)) return null;
+  return calcQd(p.c, p.n, p.e);                  // enfoncement réel
+}
+function eNPasse(p) {                            // mm enfoncés par coup
+  return (p && p.e > 0 && p.c > 0) ? (p.e / p.c) : null;
+}
+function hauteurMesureeCm(p) {
+  return (p && p.e > 0) ? (p.e / 10) : null;
+}
+// Profondeur cumulée d'après les mesures. Les passes sans mesure comptent
+// pour leurs 10 cm nominaux. Retourne null si aucune passe n'est mesurée.
+function profMesureeCm(passes) {
+  let t = 0, mesuree = false;
+  (passes || []).forEach(p => {
+    if (p.e > 0) { t += p.e / 10; mesuree = true; }
+    else t += 10;
+  });
+  return mesuree ? t : null;
+}
+// Y a-t-il au moins une passe mesurée ?
+function aDesMesures(passes) {
+  return (passes || []).some(p => p.e > 0);
 }
 
 // ══ COUP ACTIONS ══════════════════════════════════════════════════════
@@ -1125,7 +1152,42 @@ function openEditModal(idx) {
     'Modifier ici propagera le changement sur ' + affected + ' passe(s) (cette passe + les suivantes)';
 
   updateEditTigesUI();
+  remplirMesuresModal(p);
   document.getElementById('edit-modal').classList.remove('hidden');
+}
+
+// Détail des mesures d'une passe : les deux séries en vis-à-vis,
+// puis l'enfoncement coup par coup.
+function remplirMesuresModal(p) {
+  const box = document.getElementById('modal-mesures');
+  if (!box) return;
+  if (!p || !(p.e > 0)) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+
+  const qdN = qdPasse(p), qdM = qdMesure(p), eN = eNPasse(p);
+  const res = document.getElementById('modal-mesures-resume');
+  if (res) {
+    res.innerHTML =
+      'Enfoncement mesuré : <strong>' + p.e.toFixed(1) + ' mm</strong>' +
+        (p.part ? ' <span style="color:var(--orange)">(passe partielle)</span>' : '') + '<br>' +
+      'Enfoncement par coup : <strong>' + (eN !== null ? eN.toFixed(2) + ' mm' : '—') + '</strong><br>' +
+      '<span style="color:var(--text2)">qd normalisé (10 cm)</span> : ' +
+        (qdN !== null ? qdN.toFixed(2) + ' MPa' : '—') + '<br>' +
+      '<span style="color:var(--text2)">qd mesuré</span> : ' +
+        (qdM !== null ? qdM.toFixed(2) + ' MPa' : '—');
+  }
+
+  const det = document.getElementById('modal-mesures-coups');
+  if (!det) return;
+  const eb = p.eb || [];
+  if (!eb.length) { det.innerHTML = ''; return; }
+  let h = '<table><tr><th>Coup</th><th>Enfoncement (mm)</th><th>Cumul (mm)</th></tr>';
+  let cum = 0;
+  eb.forEach((v, i) => {
+    cum += v;
+    h += '<tr><td>' + (i + 1) + '</td><td>' + v.toFixed(1) + '</td><td>' + cum.toFixed(1) + '</td></tr>';
+  });
+  det.innerHTML = h + '</table>';
 }
 
 function adjustEditTiges(delta) {
@@ -2077,7 +2139,8 @@ function exportXLSX() {
     ['Opérateur',c.operateur|| '—'],
     ['Date',     c.date     || '—'],
     [],
-    ['Profondeur atteinte (m)', +(profPassesCm(S.passes)/100).toFixed(2)],
+    ['Profondeur atteinte — grille (m)', +(profPassesCm(S.passes)/100).toFixed(2)],
+    ['Profondeur atteinte — mesurée (m)', profMesureeCm(S.passes)!==null ? +(profMesureeCm(S.passes)/100).toFixed(3) : '—'],
     ['Niveau d\'eau (m)', S.niveauEau !== null ? S.niveauEau : 'Non rencontré'],
     [],
     ['GPS Latitude',  S.gps ? S.gps.lat : '—'],
@@ -2100,12 +2163,12 @@ function exportXLSX() {
   ];
 
   // Sheet 2 : Données
-  const headers = ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)',
-                   'Enfonc. mesuré (mm)','e/N moyen (mm)','Passe partielle','Refus','Note','Timestamp'];
+  const headers = ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd normalisé (MPa)',
+                   'Enfonc. mesuré (mm)','e/N mesuré (mm)','qd mesuré (MPa)','Passe partielle',
+                   'Refus','Note','Timestamp'];
   const data = [headers];
   S.passes.forEach(p => {
-    const qd = qdPasse(p);
-    const eN = (p.e > 0 && p.c > 0) ? +(p.e / p.c).toFixed(2) : '';
+    const qd = qdPasse(p), qdM = qdMesure(p), eN = eNPasse(p);
     data.push([
       +(p.d0/100).toFixed(2),
       +(p.d1/100).toFixed(2),
@@ -2113,7 +2176,8 @@ function exportXLSX() {
       p.n,
       qd !== null ? +qd.toFixed(3) : 'NA',
       (p.e > 0) ? +p.e.toFixed(1) : '',
-      eN,
+      eN !== null ? +eN.toFixed(2) : '',
+      qdM !== null ? +qdM.toFixed(3) : '',
       p.part ? 'OUI' : '',
       p.r ? 'OUI' : 'NON',
       p.note || '',
@@ -2125,8 +2189,8 @@ function exportXLSX() {
   const wsInfo = XLSX.utils.aoa_to_sheet(info);
   wsInfo['!cols'] = [{wch:30},{wch:40}];
   const wsData = XLSX.utils.aoa_to_sheet(data);
-  wsData['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},
-                     {wch:18},{wch:14},{wch:14},{wch:8},{wch:30},{wch:22}];
+  wsData['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:16},
+                     {wch:18},{wch:16},{wch:16},{wch:14},{wch:8},{wch:30},{wch:22}];
   XLSX.utils.book_append_sheet(wb, wsInfo, 'Info');
   XLSX.utils.book_append_sheet(wb, wsData, 'Données');
 
@@ -2164,12 +2228,12 @@ function exportCSV() {
     S.niveauEau!==null ? '# Niveau eau : '+S.niveauEau+' m' : '# Niveau eau : non rencontré',
     '# Observations : ' + (obs || '(aucune)'),
     '# Photos : ' + photoCount + ' jointe(s)',
-    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Enfoncement_mm,eN_moyen_mm,Partielle,Refus,Note,Timestamp',
+    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_normalise_MPa,Enfoncement_mm,eN_mesure_mm,qd_mesure_MPa,Partielle,Refus,Note,Timestamp',
     ...S.passes.map(p=>{
-      const qd=qdPasse(p);
-      const eN=(p.e>0&&p.c>0)?(p.e/p.c).toFixed(2):'';
+      const qd=qdPasse(p), qdM=qdMesure(p), eN=eNPasse(p);
       return [p.d0,p.d1,p.c,p.n,(qd!==null?qd.toFixed(3):'NA'),
-              (p.e>0?p.e.toFixed(1):''),eN,(p.part?'OUI':''),
+              (p.e>0?p.e.toFixed(1):''),(eN!==null?eN.toFixed(2):''),
+              (qdM!==null?qdM.toFixed(3):''),(p.part?'OUI':''),
               (p.r?'OUI':'NON'),csvField(p.note||''),p.t].join(',');
     })
   ];
@@ -2219,14 +2283,21 @@ function badge(c,r) {
 
 function buildTable(passes, showQd) {
   if (!passes.length) return '<div class="empty">Aucune donnée</div>';
-  let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th><span class="lc">qd</span> MPa</th>':'')+'<th>Tiges</th></tr>';
+  // La colonne e/N n'apparaît que si le capteur a effectivement mesuré
+  const mes = aDesMesures(S.passes);
+  let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+
+        (showQd?'<th><span class="lc">qd</span> MPa</th>':'')+
+        (mes?'<th><span class="lc">e/N</span> mm</th>':'')+
+        '<th>Tiges</th></tr>';
   passes.forEach(p => {
-    const ri=S.passes.indexOf(p), qd=qdPasse(p);
+    const ri=S.passes.indexOf(p), qd=qdPasse(p), eN=eNPasse(p);
     const noteIcon = (p.note && p.note.length) ? '<span class="note-icon" title="Note">📝</span>' : '';
+    const partIcon = p.part ? '<span class="note-icon" title="Passe partielle">◐</span>' : '';
     h+='<tr class="data-row'+(p.r?' refus-row':'')+'" onclick="openEditModal('+ri+')">'+
-      '<td>'+p.d0+'–'+p.d1+noteIcon+'</td>'+
+      '<td>'+p.d0+'–'+p.d1+noteIcon+partIcon+'</td>'+
       '<td>'+badge(p.c,p.r)+'</td>'+
       (showQd?'<td>'+((!p.r&&qd!==null)?qd.toFixed(2):'—')+'</td>':'')+
+      (mes?'<td>'+(eN!==null?eN.toFixed(2):'—')+'</td>':'')+
       '<td>'+p.n+'</td></tr>';
   });
   return h + '</table>';
@@ -2253,7 +2324,10 @@ function render() {
     const eauStr = (S.niveauEau!==null && S.niveauEau!==undefined) ? S.niveauEau + ' m' : '—';
     const lastP = S.passes[S.passes.length-1];
     const arret = lastP.r ? 'Refus' : 'Arrêt op.';
-    sr.innerHTML=stat(profM,'profondeur')+stat(eauStr,"prof. eau")+stat(arret,"arrêt");
+    let html = stat(profM,'prof. grille')+stat(eauStr,"prof. eau")+stat(arret,"arrêt");
+    const pm = profMesureeCm(S.passes);
+    if (pm !== null) html += stat((pm/100).toFixed(3)+' m','prof. mesurée');
+    sr.innerHTML = html;
   } else sc.style.display='none';
 
   renderGPS();
@@ -2957,30 +3031,34 @@ function exportAllExcel() {
       ['Chantier', DB.chantier||'—'],
       ['Date', DB.date||'—'],
       ['Opérateur', DB.operateur||'—'],
-      ['Profondeur atteinte (m)', +(profPassesCm(s.passes)/100).toFixed(2)],
+      ['Profondeur atteinte — grille (m)', +(profPassesCm(s.passes)/100).toFixed(2)],
+      ['Profondeur atteinte — mesurée (m)', profMesureeCm(s.passes)!==null ? +(profMesureeCm(s.passes)/100).toFixed(3) : '—'],
       ['Niveau d\'eau (m)', s.niveauEau!=null ? s.niveauEau : 'Non rencontré'],
       ['Cote de référence (m)', s.cote!=null ? s.cote : '—'],
       ['GPS', s.gps ? s.gps.lat+', '+s.gps.lon : '—'],
       ['Observations', s.observations||''],
       [],
-      ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)',
-       'Enfonc. mesuré (mm)','e/N moyen (mm)','Passe partielle','Refus','Note','Timestamp']
+      ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd normalisé (MPa)',
+       'Enfonc. mesuré (mm)','e/N mesuré (mm)','qd mesuré (MPa)','Passe partielle',
+       'Refus','Note','Timestamp']
     ];
     (s.passes||[]).forEach(p => {
-      const qd = qdPasse(p);
-      const eN = (p.e > 0 && p.c > 0) ? +(p.e / p.c).toFixed(2) : '';
+      const qd = qdPasse(p), qdM = qdMesure(p), eN = eNPasse(p);
       data.push([
         +(p.d0/100).toFixed(2),+(p.d1/100).toFixed(2),
         p.c, p.n,
         qd!=null ? +qd.toFixed(3) : 'NA',
-        (p.e > 0) ? +p.e.toFixed(1) : '', eN, p.part ? 'OUI' : '',
+        (p.e > 0) ? +p.e.toFixed(1) : '',
+        eN !== null ? +eN.toFixed(2) : '',
+        qdM !== null ? +qdM.toFixed(3) : '',
+        p.part ? 'OUI' : '',
         p.r ? 'OUI' : 'NON',
         p.note||'', p.t
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},
-                   {wch:18},{wch:14},{wch:14},{wch:8},{wch:30},{wch:22}];
+    ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:16},
+                   {wch:18},{wch:16},{wch:16},{wch:14},{wch:8},{wch:30},{wch:22}];
     XLSX.utils.book_append_sheet(wb, ws, (s.nom||'Sondage').slice(0,31));
   });
   const filename = exportName([chantierSlug(), DB.date || today(), 'chantier'], 'xlsx');
