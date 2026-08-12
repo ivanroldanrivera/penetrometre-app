@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v33</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v34</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -2418,6 +2418,38 @@ function renderChartLive() {
   renderChart();
 }
 
+// Un point de qd PAR COUP, placé à la profondeur réellement atteinte à la
+// fin de ce coup. C'est la résolution maximale du capteur : là où la série
+// manuelle donne un point tous les 10 cm, celle-ci en donne un par coup.
+//
+// Pour un coup isolé, N = 1 et e = l'enfoncement de ce coup :
+//     qd = (M·g·h) / (A · e) · M/(M+Mg+Mp+n·Mt)
+//
+// Un coup sans déplacement mesurable donnerait une résistance infinie. On
+// plafonne donc à 0,1 mm : en dessous, on est dans le bruit du capteur et
+// la valeur sort de l'échelle du graphique de toute façon.
+const E_COUP_MIN_MM = 0.1;
+
+function pointsQdParCoup(passes) {
+  const out = [];
+  let cum = 0;                                   // profondeur cumulée, cm
+  (passes || []).forEach(p => {
+    const eb = p.eb || [];
+    if (!eb.length) {                            // passe non mesurée
+      cum += (p.e > 0) ? p.e / 10 : 10;
+      return;
+    }
+    eb.forEach(v => {
+      cum += v / 10;                             // mm -> cm
+      const q = calcQd(1, p.n, Math.max(v, E_COUP_MIN_MM));
+      if (q !== null && q > 0) {
+        out.push({ d: -(cum / 100), qd: q, refus: !!p.r, e: v });
+      }
+    });
+  });
+  return out;
+}
+
 // Profil mesuré : profondeur réelle de début et de fin de chaque passe,
 // cumulée d'après les enfoncements relevés. Une passe non mesurée compte
 // pour ses 10 cm nominaux.
@@ -2435,11 +2467,8 @@ function profilMesure(passes) {
 function renderChart() {
   const wrap=document.getElementById('chart-wrap');
   const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:qdPasse(p)})).filter(x=>x.qd!==null&&x.qd>0);
-  // Série mesurée : même grandeur, mais profondeur et enfoncement réels
-  const ptsM = profilMesure(S.passes)
-    .filter(g => !g.p.r && g.p.c > 0 && g.p.e > 0)
-    .map(g => ({ d: -(g.d1/100), qd: qdMesure(g.p) }))
-    .filter(x => x.qd !== null && x.qd > 0);
+  // Série automatique : UN POINT PAR COUP, à sa profondeur réelle.
+  const ptsM = pointsQdParCoup(S.passes);
   if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
   // Échelles FIXES : Y de 0 à -5 m (ou plus profond si dépasse), X de 0.1 à 100 MPa
   const minQd = 0.1;
@@ -2506,14 +2535,16 @@ function renderChart() {
   }
 
   // Tracé de la série mesurée, superposé sans toucher à la normalisée
+  // Un marqueur par coup. Le trait fin qui les relie sert seulement à suivre
+  // la progression ; ce sont les points qui portent l'information.
   let pathM='', dotsM='';
   ptsM.forEach((x,i)=>{
     const px=xS(x.qd).toFixed(1), py=yS(x.d).toFixed(1);
     pathM+=(i===0?'M':'L')+px+','+py+' ';
-    dotsM+='<circle cx="'+px+'" cy="'+py+'" r="2.6" fill="#0F6E56"/>';
+    dotsM+='<circle cx="'+px+'" cy="'+py+'" r="1.9" fill="'+(x.refus?'#A32D2D':'#0F6E56')+'"/>';
   });
   const serieM = ptsM.length
-    ? '<path d="'+pathM+'" fill="none" stroke="#0F6E56" stroke-width="1.8" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>'+dotsM
+    ? '<path d="'+pathM+'" fill="none" stroke="#0F6E56" stroke-width="0.8" stroke-opacity="0.55" stroke-linejoin="round" stroke-linecap="round"/>'+dotsM
     : '';
 
   // Marqueur creux orange, volontairement différent des points enregistrés :
@@ -2546,8 +2577,9 @@ function renderChart() {
       lg.innerHTML =
         '<div><span style="display:inline-block;width:22px;border-top:2px solid #185FA5;vertical-align:middle;"></span> ' +
         'qd normalisé — passes de 10 cm (NF P 94-115)</div>' +
-        '<div><span style="display:inline-block;width:22px;border-top:2px dashed #0F6E56;vertical-align:middle;"></span> ' +
-        'qd mesuré — enfoncement réel du capteur</div>' +
+        '<div><span style="display:inline-block;width:11px;height:11px;background:#0F6E56;border-radius:50%;vertical-align:middle;"></span> ' +
+        'qd automatique — <strong>un point par coup</strong>, à sa profondeur mesurée ' +
+        '(' + ptsM.length + ' coup' + (ptsM.length > 1 ? 's' : '') + ')</div>' +
         (live ? '<div><span style="display:inline-block;width:11px;height:11px;border:2px solid #854F0B;border-radius:50%;vertical-align:middle;"></span> ' +
                 'passe en cours — ' + live.n + ' coup(s), ' + live.e.toFixed(1) + ' mm · qd = ' +
                 live.qd.toFixed(2) + ' MPa</div>' : '');
