@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v27</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v28</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -336,6 +336,17 @@
 
       <div class="cap-bar" id="cap-bar"><div class="cap-fill" id="cap-fill"></div></div>
       <div class="cap-scale"><span>0</span><span>5 cm</span><span>10 cm</span></div>
+
+      <div class="audio-stats" style="margin:10px 0 6px;">
+        <div class="audio-stat">
+          <div class="audio-stat-val" id="cap-dernier" style="color:var(--green);">—</div>
+          <div class="audio-stat-lbl">dernier coup (mm)</div>
+        </div>
+        <div class="audio-stat">
+          <div class="audio-stat-val" id="cap-moy" style="color:var(--green);">—</div>
+          <div class="audio-stat-lbl">moyenne e/N (mm)</div>
+        </div>
+      </div>
 
       <button class="btn-ble" id="cap-btn" onclick="bleToggle()">🔗 Connecter le capteur</button>
       <div class="btn-row2" style="margin-top:8px;">
@@ -942,23 +953,60 @@ function tigesM(n) { return (n * (S.cfg.Lt || 0.5)).toFixed(2); }
 function depth()   { return S.passes.length * 10; }
 
 // ══ qd FORMULA ════════════════════════════════════════════════════════
-function calcQd(N, n) {
+// eMm : enfoncement réellement mesuré de la passe, en millimètres.
+// Sans capteur (ou passe complète), on garde les 10 cm de la norme.
+function calcQd(N, n, eMm) {
   if (!N || N <= 0) return null;
   const { M, h, Mg, Mt, Mp, A } = S.cfg;
-  const A_m2 = A / 10000, e_m = 0.10;
+  const A_m2 = A / 10000;
+  const e_m  = (eMm && eMm > 0) ? (eMm / 1000) : 0.10;
   try {
     const qd = (M * 9.81 * h) / (A_m2 * e_m / N) * (M / (M + Mg + Mp + n * Mt)) / 1e6;
     return isFinite(qd) && qd > 0 ? qd : null;
   } catch(e) { return null; }
 }
 
+// qd d'une passe enregistrée.
+// L'enfoncement mesuré ne remplace les 10 cm nominaux que pour les passes
+// incomplètes (arrêt en cours de passe, refus) : c'est là que l'arrondi à
+// 10 cm fausse réellement le résultat. Les passes complètes restent sur la
+// grille normalisée, pour ne pas injecter l'erreur du capteur partout.
+function qdPasse(p) {
+  if (!p) return null;
+  return calcQd(p.c, p.n, (p.part && p.e > 0) ? p.e : 0);
+}
+
+// Hauteur réelle d'une passe en cm (mesurée si partielle, sinon 10)
+function hauteurPasse(p) {
+  return (p && p.part && p.e > 0) ? (p.e / 10) : 10;
+}
+
+// Profondeur réellement atteinte, en cm.
+// depth() reste le compteur de grille (n × 10 cm) qui positionne les passes
+// et sert de repère normalisé. Cette fonction-ci donne la profondeur vraie,
+// où une dernière passe interrompue à 6,2 cm compte pour 6,2 et non pour 10.
+function profPassesCm(passes) {
+  let t = 0;
+  (passes || []).forEach(p => { t += hauteurPasse(p); });
+  return t;
+}
+
 // ══ COUP ACTIONS ══════════════════════════════════════════════════════
 function addCoup(d) {
   if (depth() >= S.cfg.profMax) return;
+  const avant = S.coups;
   S.coups = Math.max(0, S.coups + d);
+  const delta = S.coups - avant;
+  // Le capteur suit les corrections manuelles comme les coups détectés
+  if (delta > 0) _capteurNoterCoup(delta);
+  else if (delta < 0) _capteurRetirerCoup(-delta);
   save(); render();
 }
-function resetCoup() { S.coups = 0; _audioResetCount(); save(); render(); }
+function resetCoup() {
+  S.coups = 0; _audioResetCount();
+  if (typeof _cap !== 'undefined') _cap.posCoups = [];
+  save(); render();
+}
 
 // L'origine du capteur suit la passe en cours, comme le compteur de coups
 function _capteurResetRef() {
@@ -976,12 +1024,21 @@ function _audioResetCount() {
 }
 function setCoupManual() {
   const v = prompt('Nombre de coups :', S.coups);
-  if (v !== null) { const n = parseInt(v); if (!isNaN(n) && n >= 0) { S.coups = n; save(); render(); } }
+  if (v !== null) {
+    const n = parseInt(v);
+    if (!isNaN(n) && n >= 0) {
+      S.coups = n;
+      if (typeof _cap !== 'undefined') _capteurAjusterCoups(n);
+      save(); render();
+    }
+  }
 }
 
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
-  S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() });
+  const p = { d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() };
+  _capteurAnnoterPasse(p);
+  S.passes.push(p);
   S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
   // Auto-prompt : ouvrir le modal tiges quand depth atteint (n_tiges × Lt) − 0.1 m
   const Lt = S.cfg.Lt || 0.5;
@@ -996,7 +1053,9 @@ function validerPasse() {
 
 function marquerRefus() {
   if (!confirm('Marquer un REFUS à ' + depth() + ' cm ?')) return;
-  S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() });
+  const p = { d0:depth(), d1:depth()+10, c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() };
+  _capteurAnnoterPasse(p);
+  S.passes.push(p);
   S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
 }
 
@@ -1050,7 +1109,7 @@ function closeTigesModalDirect() { document.getElementById('tiges-modal').classL
 function openEditModal(idx) {
   editIdx = idx;
   const p = S.passes[idx];
-  const qd = calcQd(p.c, p.n);
+  const qd = qdPasse(p);
   editTigesTemp = p.n;
 
   document.getElementById('edit-modal-sub').textContent =
@@ -1267,8 +1326,70 @@ let _cap = {
   ratio:0, ads:false,
   ref:0,                // origine de la passe en cours
   seuilAtteint:false,   // évite de redéclencher en boucle
-  lastSeen:0
+  lastSeen:0,
+  posCoups:[]           // position relevée à chaque coup de la passe en cours
 };
+
+// ── Enfoncement par coup ──────────────────────────────────────────────
+// À chaque coup on mémorise la position AVANT que l'enfoncement de ce
+// coup ait eu lieu. L'enfoncement du coup k se déduit donc de la position
+// relevée au coup suivant :
+//
+//     enfoncement(k) = position(k+1) − position(k)
+//     enfoncement(dernier) = position actuelle − position(dernier)
+//
+// Aucune temporisation n'est nécessaire : quand le coup suivant arrive,
+// le mouvement du précédent est terminé depuis longtemps. C'est plus
+// robuste qu'une fenêtre de mesure calée sur un délai fixe.
+
+function _capteurNoterCoup(n) {
+  if (!_cap.connected) return;
+  const k = Math.max(1, n || 1);
+  for (let i = 0; i < k; i++) _cap.posCoups.push(_cap.mm);
+}
+
+function _capteurRetirerCoup(n) {
+  const k = Math.max(1, n || 1);
+  for (let i = 0; i < k && _cap.posCoups.length; i++) _cap.posCoups.pop();
+}
+
+// Aligne le tableau sur un nombre de coups fixé à la main
+function _capteurAjusterCoups(nb) {
+  if (!_cap.connected) { _cap.posCoups = []; return; }
+  while (_cap.posCoups.length > nb) _cap.posCoups.pop();
+  while (_cap.posCoups.length < nb) _cap.posCoups.push(_cap.mm);
+}
+
+// Enfoncements successifs, en mm arrondis au dixième
+function _capteurEnfoncementsParCoup() {
+  const p = _cap.posCoups;
+  const out = [];
+  for (let i = 0; i < p.length; i++) {
+    const fin = (i + 1 < p.length) ? p[i + 1] : _cap.mm;
+    out.push(Math.round((fin - p[i]) * 10) / 10);
+  }
+  return out;
+}
+
+// Enfoncement du coup en cours, pour l'affichage direct
+function _capteurDernierCoupMm() {
+  if (!_cap.connected || !_cap.posCoups.length) return null;
+  return _cap.mm - _cap.posCoups[_cap.posCoups.length - 1];
+}
+
+// Ajoute les mesures à une passe au moment de sa validation.
+// Sans capteur connecté, la passe reste strictement identique à avant :
+// aucun champ ajouté, aucun comportement modifié.
+function _capteurAnnoterPasse(p) {
+  if (typeof _cap === 'undefined' || !_cap.connected) return;
+  const e = Math.round(capteurEnfoncement() * 10) / 10;   // total mesuré, mm
+  if (!isFinite(e)) return;
+  p.e  = e;
+  p.eb = _capteurEnfoncementsParCoup();                   // détail par coup
+  // Passe incomplète : l'opérateur a validé avant d'atteindre le seuil
+  const seuil = capteurCfg().seuil;
+  p.part = (e < seuil * 0.95);
+}
 
 function bleDispo() {
   return (typeof navigator !== 'undefined') && !!navigator.bluetooth;
@@ -1429,6 +1550,16 @@ function renderCapteur() {
   if (hint && !bleDispo()) {
     hint.innerHTML = 'Bluetooth non pris en charge par ce navigateur.<br>' +
                      'Utilisez Chrome sous Android ; sur iPhone la saisie manuelle reste disponible.';
+  }
+
+  // Enfoncement par coup
+  const der = document.getElementById('cap-dernier');
+  const moy = document.getElementById('cap-moy');
+  const dc  = _capteurDernierCoupMm();
+  if (der) der.textContent = (dc === null) ? '—' : dc.toFixed(1);
+  if (moy) {
+    const nb = _cap.posCoups.length;
+    moy.textContent = (!_cap.connected || nb === 0) ? '—' : (capteurEnfoncement() / nb).toFixed(1);
   }
 
   // Onglet Config
@@ -1598,6 +1729,7 @@ function _audioOnHit() {
   if (depth() >= S.cfg.profMax) return;
   S.coups++;
   _au.count++;
+  _capteurNoterCoup(1);                             // relève la position pour ce coup
   const cv = document.getElementById('coup-val');   if (cv) cv.textContent = S.coups;
   const ac = document.getElementById('audio-count'); if (ac) ac.textContent = _au.count;
   const c = audioCfg();
@@ -1945,7 +2077,7 @@ function exportXLSX() {
     ['Opérateur',c.operateur|| '—'],
     ['Date',     c.date     || '—'],
     [],
-    ['Profondeur atteinte (m)', +(depth()/100).toFixed(2)],
+    ['Profondeur atteinte (m)', +(profPassesCm(S.passes)/100).toFixed(2)],
     ['Niveau d\'eau (m)', S.niveauEau !== null ? S.niveauEau : 'Non rencontré'],
     [],
     ['GPS Latitude',  S.gps ? S.gps.lat : '—'],
@@ -1968,16 +2100,21 @@ function exportXLSX() {
   ];
 
   // Sheet 2 : Données
-  const headers = ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)','Refus','Note','Timestamp'];
+  const headers = ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)',
+                   'Enfonc. mesuré (mm)','e/N moyen (mm)','Passe partielle','Refus','Note','Timestamp'];
   const data = [headers];
   S.passes.forEach(p => {
-    const qd = calcQd(p.c, p.n);
+    const qd = qdPasse(p);
+    const eN = (p.e > 0 && p.c > 0) ? +(p.e / p.c).toFixed(2) : '';
     data.push([
       +(p.d0/100).toFixed(2),
       +(p.d1/100).toFixed(2),
       p.c,
       p.n,
       qd !== null ? +qd.toFixed(3) : 'NA',
+      (p.e > 0) ? +p.e.toFixed(1) : '',
+      eN,
+      p.part ? 'OUI' : '',
       p.r ? 'OUI' : 'NON',
       p.note || '',
       p.t
@@ -1988,7 +2125,8 @@ function exportXLSX() {
   const wsInfo = XLSX.utils.aoa_to_sheet(info);
   wsInfo['!cols'] = [{wch:30},{wch:40}];
   const wsData = XLSX.utils.aoa_to_sheet(data);
-  wsData['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},{wch:8},{wch:30},{wch:22}];
+  wsData['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},
+                     {wch:18},{wch:14},{wch:14},{wch:8},{wch:30},{wch:22}];
   XLSX.utils.book_append_sheet(wb, wsInfo, 'Info');
   XLSX.utils.book_append_sheet(wb, wsData, 'Données');
 
@@ -2026,10 +2164,13 @@ function exportCSV() {
     S.niveauEau!==null ? '# Niveau eau : '+S.niveauEau+' m' : '# Niveau eau : non rencontré',
     '# Observations : ' + (obs || '(aucune)'),
     '# Photos : ' + photoCount + ' jointe(s)',
-    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Refus,Note,Timestamp',
+    'Prof_debut_cm,Prof_fin_cm,Nb_coups,Nb_tiges,qd_MPa,Enfoncement_mm,eN_moyen_mm,Partielle,Refus,Note,Timestamp',
     ...S.passes.map(p=>{
-      const qd=calcQd(p.c,p.n);
-      return [p.d0,p.d1,p.c,p.n,(qd!==null?qd.toFixed(3):'NA'),(p.r?'OUI':'NON'),csvField(p.note||''),p.t].join(',');
+      const qd=qdPasse(p);
+      const eN=(p.e>0&&p.c>0)?(p.e/p.c).toFixed(2):'';
+      return [p.d0,p.d1,p.c,p.n,(qd!==null?qd.toFixed(3):'NA'),
+              (p.e>0?p.e.toFixed(1):''),eN,(p.part?'OUI':''),
+              (p.r?'OUI':'NON'),csvField(p.note||''),p.t].join(',');
     })
   ];
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
@@ -2080,7 +2221,7 @@ function buildTable(passes, showQd) {
   if (!passes.length) return '<div class="empty">Aucune donnée</div>';
   let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+(showQd?'<th><span class="lc">qd</span> MPa</th>':'')+'<th>Tiges</th></tr>';
   passes.forEach(p => {
-    const ri=S.passes.indexOf(p), qd=calcQd(p.c,p.n);
+    const ri=S.passes.indexOf(p), qd=qdPasse(p);
     const noteIcon = (p.note && p.note.length) ? '<span class="note-icon" title="Note">📝</span>' : '';
     h+='<tr class="data-row'+(p.r?' refus-row':'')+'" onclick="openEditModal('+ri+')">'+
       '<td>'+p.d0+'–'+p.d1+noteIcon+'</td>'+
@@ -2108,7 +2249,7 @@ function render() {
   const sc=document.getElementById('stats-card'), sr=document.getElementById('stats-row');
   if (S.passes.length) {
     sc.style.display='';
-    const profM = (d/100).toFixed(2) + ' m';
+    const profM = (profPassesCm(S.passes)/100).toFixed(2) + ' m';
     const eauStr = (S.niveauEau!==null && S.niveauEau!==undefined) ? S.niveauEau + ' m' : '—';
     const lastP = S.passes[S.passes.length-1];
     const arret = lastP.r ? 'Refus' : 'Arrêt op.';
@@ -2144,7 +2285,7 @@ function syncFields(){
 // ══ GRAPHIQUE ═════════════════════════════════════════════════════════
 function renderChart() {
   const wrap=document.getElementById('chart-wrap');
-  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
+  const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:qdPasse(p)})).filter(x=>x.qd!==null&&x.qd>0);
   if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
   // Échelles FIXES : Y de 0 à -5 m (ou plus profond si dépasse), X de 0.1 à 100 MPa
   const minQd = 0.1;
@@ -2269,7 +2410,7 @@ function renderSondagesTab() {
     if (!DB.sondages.length) { list.innerHTML = '<div class="empty">Aucun sondage</div>'; }
     else {
       list.innerHTML = DB.sondages.map(s => {
-        const prof = (s.passes||[]).length * 0.10;
+        const prof = profPassesCm(s.passes)/100;
         const ref = (s.passes||[]).some(p=>p.r);
         const isActive = s.id === DB.activeId;
         const dateStr = (s.ts||'').slice(0,10);
@@ -2471,7 +2612,7 @@ function _pdfHeader(doc, sondage, m) {
 
 function _pdfDrawChart(doc, sondage, x, y, w, h) {
   const passes = sondage.passes || [];
-  const pts = passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:calcQd(p.c,p.n)})).filter(x=>x.qd!==null&&x.qd>0);
+  const pts = passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:qdPasse(p)})).filter(x=>x.qd!==null&&x.qd>0);
   if (!pts.length) {
     doc.setFontSize(8); doc.setTextColor(120); doc.text('Aucune donnée graphique', x + w/2, y + h/2, { align:'center' });
     doc.setTextColor(0);
@@ -2553,7 +2694,7 @@ function _pdfTableData(doc, sondage, startY, m, withNotes) {
     ? [['De (m)','À (m)','N','Tiges','qd MPa','Note']]
     : [['De (m)','À (m)','N','Tiges','qd MPa']];
   const rows = passes.map(p => {
-    const qd = calcQd(p.c, p.n);
+    const qd = qdPasse(p);
     const base = [
       (p.d0/100).toFixed(2),
       (p.d1/100).toFixed(2),
@@ -2583,7 +2724,7 @@ function _pdfTableData(doc, sondage, startY, m, withNotes) {
 
 function _pdfInfoBlock(doc, sondage, m, y) {
   const passes = sondage.passes || [];
-  const prof = (passes.length * 0.10).toFixed(2) + ' m';
+  const prof = (profPassesCm(passes)/100).toFixed(2) + ' m';
   const refus = passes.length && passes[passes.length-1].r;
   const eau = (sondage.niveauEau != null) ? sondage.niveauEau + ' m' : 'Non rencontré';
   const cote = (sondage.cote != null) ? sondage.cote + ' m' : '—';
@@ -2615,7 +2756,7 @@ function _pdfCourt(sondage) {
     startY: tabY,
     head: [['De (m)','À (m)','N','Tiges','qd']],
     body: (sondage.passes||[]).map(p => {
-      const qd = calcQd(p.c, p.n);
+      const qd = qdPasse(p);
       return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
     }),
     theme: 'striped',
@@ -2654,7 +2795,7 @@ function _pdfComplet(sondage) {
     startY: chartY,
     head: [['De','À','N','T','qd']],
     body: (sondage.passes||[]).map(p => {
-      const qd = calcQd(p.c, p.n);
+      const qd = qdPasse(p);
       return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
     }),
     theme: 'striped',
@@ -2725,11 +2866,11 @@ function _pdfMulti() {
     const passes = s.passes || [];
     const refus = passes.length && passes[passes.length-1].r;
     const totalCoups = passes.reduce((a,p)=>a+p.c,0);
-    const qdMax = Math.max(...passes.filter(p=>!p.r&&p.c>0).map(p=>calcQd(p.c,p.n)||0));
+    const qdMax = Math.max(...passes.filter(p=>!p.r&&p.c>0).map(p=>qdPasse(p)||0));
     return [
       s.nom || '—',
       passes.length,
-      (passes.length * 0.10).toFixed(2),
+      (profPassesCm(passes)/100).toFixed(2),
       (s.niveauEau != null) ? s.niveauEau.toFixed(2) : '—',
       refus ? 'Refus' : (passes.length ? 'Op.' : '—'),
       isFinite(qdMax) && qdMax > 0 ? qdMax.toFixed(2) : '—'
@@ -2758,7 +2899,7 @@ function _pdfMulti() {
       startY: tabY,
       head: [['De','À','N','T','qd']],
       body: (sondage.passes||[]).map(p => {
-        const qd = calcQd(p.c, p.n);
+        const qd = qdPasse(p);
         return [(p.d0/100).toFixed(2),(p.d1/100).toFixed(2),String(p.c),String(p.n),qd!=null?qd.toFixed(2):(p.r?'REF':'—')];
       }),
       theme: 'striped',
@@ -2794,12 +2935,12 @@ function exportAllExcel() {
   valid.forEach(s => {
     const passes = s.passes || [];
     const refus = passes.length && passes[passes.length-1].r;
-    const qds = passes.filter(p=>!p.r&&p.c>0).map(p=>calcQd(p.c,p.n)).filter(x=>x);
+    const qds = passes.filter(p=>!p.r&&p.c>0).map(p=>qdPasse(p)).filter(x=>x);
     const qdMax = qds.length ? Math.max(...qds) : 0;
     synth.push([
       s.nom||'—',
       passes.length,
-      +(passes.length*0.10).toFixed(2),
+      +(profPassesCm(passes)/100).toFixed(2),
       (s.niveauEau!=null) ? s.niveauEau : 'Non rencontré',
       (s.cote!=null) ? s.cote : '—',
       refus ? 'Refus' : 'Arrêt opérateur',
@@ -2816,26 +2957,30 @@ function exportAllExcel() {
       ['Chantier', DB.chantier||'—'],
       ['Date', DB.date||'—'],
       ['Opérateur', DB.operateur||'—'],
-      ['Profondeur atteinte (m)', +((s.passes||[]).length*0.10).toFixed(2)],
+      ['Profondeur atteinte (m)', +(profPassesCm(s.passes)/100).toFixed(2)],
       ['Niveau d\'eau (m)', s.niveauEau!=null ? s.niveauEau : 'Non rencontré'],
       ['Cote de référence (m)', s.cote!=null ? s.cote : '—'],
       ['GPS', s.gps ? s.gps.lat+', '+s.gps.lon : '—'],
       ['Observations', s.observations||''],
       [],
-      ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)','Refus','Note','Timestamp']
+      ['Prof. début (m)','Prof. fin (m)','Coups (N)','Tiges','qd (MPa)',
+       'Enfonc. mesuré (mm)','e/N moyen (mm)','Passe partielle','Refus','Note','Timestamp']
     ];
     (s.passes||[]).forEach(p => {
-      const qd = calcQd(p.c, p.n);
+      const qd = qdPasse(p);
+      const eN = (p.e > 0 && p.c > 0) ? +(p.e / p.c).toFixed(2) : '';
       data.push([
         +(p.d0/100).toFixed(2),+(p.d1/100).toFixed(2),
         p.c, p.n,
         qd!=null ? +qd.toFixed(3) : 'NA',
+        (p.e > 0) ? +p.e.toFixed(1) : '', eN, p.part ? 'OUI' : '',
         p.r ? 'OUI' : 'NON',
         p.note||'', p.t
       ]);
     });
     const ws = XLSX.utils.aoa_to_sheet(data);
-    ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},{wch:8},{wch:30},{wch:22}];
+    ws['!cols'] = [{wch:14},{wch:14},{wch:10},{wch:8},{wch:10},
+                   {wch:18},{wch:14},{wch:14},{wch:8},{wch:30},{wch:22}];
     XLSX.utils.book_append_sheet(wb, ws, (s.nom||'Sondage').slice(0,31));
   });
   const filename = exportName([chantierSlug(), DB.date || today(), 'chantier'], 'xlsx');

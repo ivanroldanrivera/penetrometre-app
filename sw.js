@@ -1,4 +1,4 @@
-const CACHE = 'pdl-v27';
+const CACHE = 'pdl-v28';
 const LOCAL = [
   './',
   './index.html',
