@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v36</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v38</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1847,7 +1847,8 @@ function _audioOnHit() {
   _au.count++;
   _capteurNoterCoup(1);                             // relève la position pour ce coup
   renderCapteur();                                  // journal visible immédiatement
-  renderChartLive();                                // et la courbe se replace
+  renderCoupsTables();                              // le tableau suit sans validation
+  renderChartSiVisible();                           // et la courbe aussi
   const cv = document.getElementById('coup-val');   if (cv) cv.textContent = S.coups;
   const ac = document.getElementById('audio-count'); if (ac) ac.textContent = _au.count;
   const c = audioCfg();
@@ -2374,16 +2375,7 @@ function render() {
   document.getElementById('table-saisie').innerHTML  = buildTable(ordered, true);
   document.getElementById('table-donnees').innerHTML = buildTable(ordered, true);
 
-  // Tableau des coups mesurés — masqué tant qu'il n'y a rien à montrer
-  const tc = buildTableCoups();
-  ['s','d'].forEach(suf => {
-    const card = document.getElementById('coups-card-' + suf);
-    const tbl  = document.getElementById('table-coups-' + suf);
-    const nb   = document.getElementById('coups-nb-' + suf);
-    if (card) card.classList.toggle('hidden', tc.nb === 0);
-    if (tbl)  tbl.innerHTML = tc.html;
-    if (nb)   nb.textContent = tc.nb + ' coup' + (tc.nb > 1 ? 's' : '');
-  });
+  renderCoupsTables(true);
 
   const sc=document.getElementById('stats-card'), sr=document.getElementById('stats-row');
   if (S.passes.length) {
@@ -2410,10 +2402,7 @@ function render() {
   // Toute modification de données rafraîchit la courbe : passe validée,
   // refus, édition, suppression. Tracé immédiat et non throttlé — render()
   // n'est appelé que sur action, jamais en rafale comme le flux capteur.
-  const ongG = document.getElementById('tab-graphique');
-  if (ongG && !ongG.classList.contains('hidden') && typeof renderChart === 'function') {
-    renderChart();
-  }
+  renderChartSiVisible();
 }
 
 function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div><div class="stat-lbl">'+l+'</div></div>';}
@@ -2437,6 +2426,16 @@ function syncFields(){
 // Redessine la courbe seulement si l'onglet est visible, et au plus 5 fois
 // par seconde. Le capteur émet à 20 Hz : reconstruire tout le SVG à cette
 // cadence ferait ramer le téléphone pour un gain visuel nul.
+// Tracé immédiat, pour les événements ponctuels : un coup détecté, une passe
+// validée, une correction. Sans limitation de cadence — sinon deux coups
+// rapprochés n'en produiraient qu'un seul à l'écran.
+function renderChartSiVisible() {
+  const ong = document.getElementById('tab-graphique');
+  if (ong && !ong.classList.contains('hidden') && typeof renderChart === 'function') {
+    renderChart();
+  }
+}
+
 let _chartDernierTrace = 0;
 function renderChartLive() {
   const ong = document.getElementById('tab-graphique');
@@ -2479,7 +2478,46 @@ function pointsQdParCoup(passes) {
       }
     });
   });
+
+  // Coups de la passe EN COURS, avant toute validation. Sans cela il faudrait
+  // valider une passe pour voir apparaître quoi que ce soit.
+  //
+  // Le dernier coup est volontairement exclu : son enfoncement n'est pas
+  // terminé tant que le coup suivant n'est pas tombé, et un qd calculé sur
+  // un déplacement encore nul partirait à plusieurs centaines de MPa.
+  if (typeof _cap !== 'undefined' && _cap.connected) {
+    const enCours = _capteurEnfoncementsParCoup();
+    enCours.slice(0, -1).forEach((v, ic) => {
+      cum += v / 10;
+      num++;
+      const q = calcQd(1, S.tiges, Math.max(v, E_COUP_MIN_MM));
+      if (q !== null && q > 0) {
+        out.push({ d: -(cum / 100), qd: q, refus: false, e: v,
+                   num: num, passe: (passes || []).length + 1, rang: ic + 1,
+                   tiges: S.tiges, encours: true });
+      }
+    });
+  }
   return out;
+}
+
+// Redessine les tableaux de coups. Appelé à chaque coup, donc on ne
+// reconstruit le HTML que si le nombre de lignes a réellement changé :
+// le capteur émet à 20 Hz et rebâtir une centaine de lignes à cette
+// cadence ferait ramer le téléphone.
+let _coupsDernierNb = -1;
+function renderCoupsTables(force) {
+  const tc = buildTableCoups();
+  if (!force && tc.nb === _coupsDernierNb) return;
+  _coupsDernierNb = tc.nb;
+  ['s','d'].forEach(suf => {
+    const card = document.getElementById('coups-card-' + suf);
+    const tbl  = document.getElementById('table-coups-' + suf);
+    const nb   = document.getElementById('coups-nb-' + suf);
+    if (card) card.classList.toggle('hidden', tc.nb === 0);
+    if (tbl)  tbl.innerHTML = tc.html;
+    if (nb)   nb.textContent = tc.nb + ' coup' + (tc.nb > 1 ? 's' : '');
+  });
 }
 
 // Tableau des coups mesurés, sur le même modèle que « Passes enregistrées ».
@@ -2492,12 +2530,15 @@ function buildTableCoups() {
           '<th><span class="lc">qd</span> MPa</th><th>Passe</th></tr>';
   ordered.forEach(x => {
     const prof = (-x.d * 100);
+    const passeTxt = x.encours
+      ? '<span style="color:var(--orange)">en cours.' + x.rang + '</span>'
+      : x.passe + '<span style="color:var(--text2)">.' + x.rang + '</span>';
     h += '<tr' + (x.refus ? ' class="refus-row"' : '') + '>' +
          '<td>' + x.num + '</td>' +
          '<td>' + prof.toFixed(1) + '</td>' +
          '<td>' + x.e.toFixed(1) + '</td>' +
          '<td>' + (x.qd >= 100 ? '&gt;100' : x.qd.toFixed(2)) + '</td>' +
-         '<td>' + x.passe + '<span style="color:var(--text2)">.' + x.rang + '</span></td>' +
+         '<td>' + passeTxt + '</td>' +
          '</tr>';
   });
   return { html: h + '</table>', nb: pts.length };
