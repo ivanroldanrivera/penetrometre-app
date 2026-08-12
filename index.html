@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v34</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v35</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -2469,7 +2469,10 @@ function renderChart() {
   const pts=S.passes.filter(p=>!p.r&&p.c>0).map(p=>({d:-(p.d1/100),qd:qdPasse(p)})).filter(x=>x.qd!==null&&x.qd>0);
   // Série automatique : UN POINT PAR COUP, à sa profondeur réelle.
   const ptsM = pointsQdParCoup(S.passes);
-  if(!pts.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
+  // Les deux séries sont indépendantes : on n'abandonne que si les deux
+  // sont vides. Un sondage entièrement en refus n'a aucun point manuel
+  // (ils sont exclus de pts) mais peut avoir des dizaines de coups mesurés.
+  if(!pts.length && !ptsM.length){wrap.innerHTML='<div class="empty">Aucune donnée à afficher</div>';return;}
   // Échelles FIXES : Y de 0 à -5 m (ou plus profond si dépasse), X de 0.1 à 100 MPa
   const minQd = 0.1;
   const maxQd = 100;
@@ -2478,7 +2481,9 @@ function renderChart() {
   const cote = (S.cote !== null && S.cote !== undefined) ? parseFloat(S.cote) : NaN;
   const showAlt = !isNaN(cote);
   const PL=55,PR=showAlt?52:16,PT=20,PB=28,W=320,chartW=W-PL-PR;
-  const chartH=Math.max(180,pts.length*20), H=chartH+PT+PB;
+  // Hauteur calée sur le nombre de passes, pas sur pts : sinon un sondage
+  // en refus, dont pts est vide, se retrouverait écrasé sur 180 px.
+  const chartH=Math.max(180,S.passes.length*20), H=chartH+PT+PB;
   const logMin=Math.log10(minQd), logMax=Math.log10(maxQd), logRange=logMax-logMin||1;
   const xS=v=>PL+(Math.log10(Math.max(v,minQd))-logMin)/logRange*chartW;
   const yS=d=>PT+((0-d)/totalD)*chartH;
@@ -2573,13 +2578,18 @@ function renderChart() {
   // Légende : n'apparaît que si les deux séries coexistent
   const lg = document.getElementById('chart-legend');
   if (lg) {
-    if (ptsM.length) {
+    // Chaque entrée n'apparaît que si sa série existe réellement
+    if (pts.length || ptsM.length) {
       lg.innerHTML =
-        '<div><span style="display:inline-block;width:22px;border-top:2px solid #185FA5;vertical-align:middle;"></span> ' +
-        'qd normalisé — passes de 10 cm (NF P 94-115)</div>' +
-        '<div><span style="display:inline-block;width:11px;height:11px;background:#0F6E56;border-radius:50%;vertical-align:middle;"></span> ' +
-        'qd automatique — <strong>un point par coup</strong>, à sa profondeur mesurée ' +
-        '(' + ptsM.length + ' coup' + (ptsM.length > 1 ? 's' : '') + ')</div>' +
+        (pts.length
+          ? '<div><span style="display:inline-block;width:22px;border-top:2px solid #185FA5;vertical-align:middle;"></span> ' +
+            'qd manuel — passes de 10 cm (NF P 94-115), ' + pts.length + ' passe' + (pts.length > 1 ? 's' : '') + '</div>'
+          : '') +
+        (ptsM.length
+          ? '<div><span style="display:inline-block;width:11px;height:11px;background:#0F6E56;border-radius:50%;vertical-align:middle;"></span> ' +
+            'qd automatique — <strong>un point par coup</strong>, à sa profondeur mesurée ' +
+            '(' + ptsM.length + ' coup' + (ptsM.length > 1 ? 's' : '') + ')</div>'
+          : '<div style="color:var(--text2)">Connectez le capteur pour la série automatique.</div>') +
         (live ? '<div><span style="display:inline-block;width:11px;height:11px;border:2px solid #854F0B;border-radius:50%;vertical-align:middle;"></span> ' +
                 'passe en cours — ' + live.n + ' coup(s), ' + live.e.toFixed(1) + ' mm · qd = ' +
                 live.qd.toFixed(2) + ' MPa</div>' : '');
