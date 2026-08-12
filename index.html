@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v35</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v36</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -396,6 +396,15 @@
       <div class="edit-hint">Toucher une ligne pour modifier</div>
       <div id="table-saisie"><div class="empty">Aucune passe enregistrée</div></div>
     </div>
+
+    <div class="card hidden" id="coups-card-s">
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Coups mesurés — automatique</div>
+        <span class="cap-chip" id="coups-nb-s"></span>
+      </div>
+      <div class="edit-hint">Un coup par ligne, profondeur réelle du capteur</div>
+      <div id="table-coups-s"></div>
+    </div>
   </div>
 
   <!-- ══ DONNÉES ══ -->
@@ -457,6 +466,15 @@
       </div>
       <div class="edit-hint">Toucher un enregistrement pour modifier</div>
       <div id="table-donnees"><div class="empty">Aucune donnée</div></div>
+    </div>
+
+    <div class="card hidden" id="coups-card-d">
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Coups mesurés — automatique</div>
+        <span class="cap-chip" id="coups-nb-d"></span>
+      </div>
+      <div class="edit-hint">Un coup par ligne, profondeur réelle du capteur</div>
+      <div id="table-coups-d"></div>
     </div>
   </div>
 
@@ -2356,6 +2374,17 @@ function render() {
   document.getElementById('table-saisie').innerHTML  = buildTable(ordered, true);
   document.getElementById('table-donnees').innerHTML = buildTable(ordered, true);
 
+  // Tableau des coups mesurés — masqué tant qu'il n'y a rien à montrer
+  const tc = buildTableCoups();
+  ['s','d'].forEach(suf => {
+    const card = document.getElementById('coups-card-' + suf);
+    const tbl  = document.getElementById('table-coups-' + suf);
+    const nb   = document.getElementById('coups-nb-' + suf);
+    if (card) card.classList.toggle('hidden', tc.nb === 0);
+    if (tbl)  tbl.innerHTML = tc.html;
+    if (nb)   nb.textContent = tc.nb + ' coup' + (tc.nb > 1 ? 's' : '');
+  });
+
   const sc=document.getElementById('stats-card'), sr=document.getElementById('stats-row');
   if (S.passes.length) {
     sc.style.display='';
@@ -2433,21 +2462,45 @@ const E_COUP_MIN_MM = 0.1;
 function pointsQdParCoup(passes) {
   const out = [];
   let cum = 0;                                   // profondeur cumulée, cm
-  (passes || []).forEach(p => {
+  let num = 0;                                   // numéro de coup, tout le sondage
+  (passes || []).forEach((p, ip) => {
     const eb = p.eb || [];
     if (!eb.length) {                            // passe non mesurée
       cum += (p.e > 0) ? p.e / 10 : 10;
       return;
     }
-    eb.forEach(v => {
+    eb.forEach((v, ic) => {
       cum += v / 10;                             // mm -> cm
+      num++;
       const q = calcQd(1, p.n, Math.max(v, E_COUP_MIN_MM));
       if (q !== null && q > 0) {
-        out.push({ d: -(cum / 100), qd: q, refus: !!p.r, e: v });
+        out.push({ d: -(cum / 100), qd: q, refus: !!p.r, e: v,
+                   num: num, passe: ip + 1, rang: ic + 1, tiges: p.n });
       }
     });
   });
   return out;
+}
+
+// Tableau des coups mesurés, sur le même modèle que « Passes enregistrées ».
+// Il suit le même tri que celui des passes.
+function buildTableCoups() {
+  const pts = pointsQdParCoup(S.passes);
+  if (!pts.length) return { html: '', nb: 0 };
+  const ordered = sortDesc ? [...pts].reverse() : [...pts];
+  let h = '<table><tr><th>Coup</th><th>Prof.(cm)</th><th>Enf.(mm)</th>' +
+          '<th><span class="lc">qd</span> MPa</th><th>Passe</th></tr>';
+  ordered.forEach(x => {
+    const prof = (-x.d * 100);
+    h += '<tr' + (x.refus ? ' class="refus-row"' : '') + '>' +
+         '<td>' + x.num + '</td>' +
+         '<td>' + prof.toFixed(1) + '</td>' +
+         '<td>' + x.e.toFixed(1) + '</td>' +
+         '<td>' + (x.qd >= 100 ? '&gt;100' : x.qd.toFixed(2)) + '</td>' +
+         '<td>' + x.passe + '<span style="color:var(--text2)">.' + x.rang + '</span></td>' +
+         '</tr>';
+  });
+  return { html: h + '</table>', nb: pts.length };
 }
 
 // Profil mesuré : profondeur réelle de début et de fin de chaque passe,
