@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v29</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v30</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -347,6 +347,8 @@
           <div class="audio-stat-lbl">moyenne e/N (mm)</div>
         </div>
       </div>
+
+      <div id="cap-coups-live" style="font-size:11px;line-height:1.8;color:var(--text);margin-bottom:10px;min-height:18px;"></div>
 
       <button class="btn-ble" id="cap-btn" onclick="bleToggle()">🔗 Connecter le capteur</button>
       <div class="btn-row2" style="margin-top:8px;">
@@ -1040,6 +1042,7 @@ function _capteurResetRef() {
   if (typeof _cap === 'undefined') return;
   _cap.ref = _cap.mm;
   _cap.seuilAtteint = false;
+  _cap.posCoups = [];        // sinon la passe suivante hérite des coups précédents
   if (typeof renderCapteur === 'function') renderCapteur();
 }
 
@@ -1572,7 +1575,9 @@ function capteurVerifierSeuil() {
   if (e < c.seuil) { if (e < c.seuil * 0.8) _cap.seuilAtteint = false; return; }
   if (_cap.seuilAtteint) return;
   _cap.seuilAtteint = true;
-  if (c.auto) validerPasse();
+  // Une passe sans aucun coup n'a pas de sens : sans ce garde-fou, déplacer
+  // la tige micro éteint créerait des passes vides tous les 10 cm.
+  if (c.auto && S.coups > 0) validerPasse();
   else if (navigator.vibrate) { try { navigator.vibrate([40,60,40]); } catch(e2) {} }
 }
 
@@ -1622,6 +1627,33 @@ function renderCapteur() {
   if (moy) {
     const nb = _cap.posCoups.length;
     moy.textContent = (!_cap.connected || nb === 0) ? '—' : (capteurEnfoncement() / nb).toFixed(1);
+  }
+
+  // Journal en direct : chaque coup mesuré depuis le début de la passe.
+  // Le dernier de la liste est le coup en cours — sa valeur grandit tant
+  // que la tige s'enfonce, et se fige à l'arrivée du coup suivant.
+  const live = document.getElementById('cap-coups-live');
+  if (live) {
+    if (!_cap.connected) {
+      live.innerHTML = '<span style="color:var(--text2)">Connectez le capteur pour mesurer chaque coup.</span>';
+    } else {
+      const eb = _capteurEnfoncementsParCoup();
+      if (!eb.length) {
+        live.innerHTML = '<span style="color:var(--text2)">En attente du premier coup…</span>';
+      } else {
+        const debut = Math.max(0, eb.length - 10);
+        const items = eb.slice(debut).map((v, i) => {
+          const num = debut + i + 1;
+          const encours = (debut + i === eb.length - 1);
+          return '<span style="white-space:nowrap;' +
+                 (encours ? 'color:var(--blue);font-weight:600;' : 'color:var(--text2);') + '">' +
+                 num + ':' + v.toFixed(1) + '</span>';
+        });
+        live.innerHTML = '<span style="color:var(--text2)">coups (mm) · </span>' +
+                         (debut > 0 ? '<span style="color:var(--text2)">… </span>' : '') +
+                         items.join('<span style="color:var(--border)"> · </span>');
+      }
+    }
   }
 
   // Onglet Config
@@ -1792,6 +1824,7 @@ function _audioOnHit() {
   S.coups++;
   _au.count++;
   _capteurNoterCoup(1);                             // relève la position pour ce coup
+  renderCapteur();                                  // journal visible immédiatement
   const cv = document.getElementById('coup-val');   if (cv) cv.textContent = S.coups;
   const ac = document.getElementById('audio-count'); if (ac) ac.textContent = _au.count;
   const c = audioCfg();
@@ -2286,9 +2319,9 @@ function buildTable(passes, showQd) {
   // La colonne e/N n'apparaît que si le capteur a effectivement mesuré
   const mes = aDesMesures(S.passes);
   let h='<table><tr><th>Prof.(cm)</th><th>Coups</th>'+
-        (showQd?'<th><span class="lc">qd</span> MPa</th>':'')+
-        (mes?'<th><span class="lc">e/N</span> mm</th>':'')+
-        '<th>Tiges</th></tr>';
+        (showQd?'<th><span class="lc">qd</span></th>':'')+
+        (mes?'<th><span class="lc">e</span> mm</th><th><span class="lc">e/N</span></th>':'')+
+        '<th>T</th></tr>';
   passes.forEach(p => {
     const ri=S.passes.indexOf(p), qd=qdPasse(p), eN=eNPasse(p);
     const noteIcon = (p.note && p.note.length) ? '<span class="note-icon" title="Note">📝</span>' : '';
@@ -2297,7 +2330,8 @@ function buildTable(passes, showQd) {
       '<td>'+p.d0+'–'+p.d1+noteIcon+partIcon+'</td>'+
       '<td>'+badge(p.c,p.r)+'</td>'+
       (showQd?'<td>'+((!p.r&&qd!==null)?qd.toFixed(2):'—')+'</td>':'')+
-      (mes?'<td>'+(eN!==null?eN.toFixed(2):'—')+'</td>':'')+
+      (mes?'<td>'+(p.e>0?p.e.toFixed(1):'—')+'</td>'+
+           '<td>'+(eN!==null?eN.toFixed(2):'—')+'</td>':'')+
       '<td>'+p.n+'</td></tr>';
   });
   return h + '</table>';
@@ -2338,6 +2372,7 @@ function render() {
   const obsEl = document.getElementById('obs-input');
   if (obsEl && obsEl.value !== (S.observations || '')) obsEl.value = S.observations || '';
   renderPhotos();
+  if (typeof renderCapteur === 'function') renderCapteur();
 }
 
 function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div><div class="stat-lbl">'+l+'</div></div>';}
