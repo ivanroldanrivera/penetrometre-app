@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v31</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v33</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -468,14 +468,7 @@
       <div id="chart-legend" style="font-size:11px;line-height:1.9;margin-top:8px;"></div>
     </div>
 
-    <div class="card hidden" id="chart-coups-card">
-      <div class="clabel">Enfoncement par coup <span class="lc">e/N</span> [mm]</div>
-      <div class="chart-wrap" id="chart-coups"></div>
-      <div style="font-size:10px;color:var(--text2);line-height:1.6;margin-top:8px;">
-        Chaque point est un coup de mouton, placé à la profondeur mesurée.
-        Un décrochement marque un changement de couche.
-      </div>
-    </div>
+
     <button class="btn-blue" style="width:100%;margin-bottom:12px;" onclick="exportChartPDF()">📐 Exporter courbe PDF (vectoriel · pour Revit)</button>
     <div class="card">
       <div class="clabel">Paramètres utilisés</div>
@@ -1542,6 +1535,7 @@ function bleOnData(ev) {
   _cap.ads   = (dv.getUint8(8) & 0x01) === 0x01;
   _cap.lastSeen = Date.now();
   renderCapteur();
+  renderChartLive();        // la courbe suit l'enfoncement en direct
   capteurVerifierSeuil();
 }
 
@@ -1835,6 +1829,7 @@ function _audioOnHit() {
   _au.count++;
   _capteurNoterCoup(1);                             // relève la position pour ce coup
   renderCapteur();                                  // journal visible immédiatement
+  renderChartLive();                                // et la courbe se replace
   const cv = document.getElementById('coup-val');   if (cv) cv.textContent = S.coups;
   const ac = document.getElementById('audio-count'); if (ac) ac.textContent = _au.count;
   const c = audioCfg();
@@ -2383,6 +2378,13 @@ function render() {
   if (obsEl && obsEl.value !== (S.observations || '')) obsEl.value = S.observations || '';
   renderPhotos();
   if (typeof renderCapteur === 'function') renderCapteur();
+  // Toute modification de données rafraîchit la courbe : passe validée,
+  // refus, édition, suppression. Tracé immédiat et non throttlé — render()
+  // n'est appelé que sur action, jamais en rafale comme le flux capteur.
+  const ongG = document.getElementById('tab-graphique');
+  if (ongG && !ongG.classList.contains('hidden') && typeof renderChart === 'function') {
+    renderChart();
+  }
 }
 
 function stat(v,l){return'<div class="stat-col"><div class="stat-val">'+v+'</div><div class="stat-lbl">'+l+'</div></div>';}
@@ -2403,6 +2405,19 @@ function syncFields(){
 
 // ══ GRAPHIQUE ═════════════════════════════════════════════════════════
 
+// Redessine la courbe seulement si l'onglet est visible, et au plus 5 fois
+// par seconde. Le capteur émet à 20 Hz : reconstruire tout le SVG à cette
+// cadence ferait ramer le téléphone pour un gain visuel nul.
+let _chartDernierTrace = 0;
+function renderChartLive() {
+  const ong = document.getElementById('tab-graphique');
+  if (!ong || ong.classList.contains('hidden')) return;
+  const t = Date.now();
+  if (t - _chartDernierTrace < 200) return;
+  _chartDernierTrace = t;
+  renderChart();
+}
+
 // Profil mesuré : profondeur réelle de début et de fin de chaque passe,
 // cumulée d'après les enfoncements relevés. Une passe non mesurée compte
 // pour ses 10 cm nominaux.
@@ -2415,82 +2430,7 @@ function profilMesure(passes) {
   });
 }
 
-// Graphique de l'enfoncement coup par coup, en regard de la profondeur.
-// Échelle X linéaire : contrairement au qd qui s'étale sur trois décades,
-// l'enfoncement par coup reste dans une plage étroite et se lit mieux ainsi.
-function renderChartCoups() {
-  const card = document.getElementById('chart-coups-card');
-  const wrap = document.getElementById('chart-coups');
-  if (!card || !wrap) return;
 
-  const pts = pointsParCoup(S.passes);
-  if (!pts.length) { card.classList.add('hidden'); wrap.innerHTML = ''; return; }
-  card.classList.remove('hidden');
-
-  const maxE   = Math.max(5, ...pts.map(x => x.e));
-  const minD   = Math.min(-0.5, ...pts.map(x => x.d));
-  const totalD = Math.abs(minD);
-
-  const PL = 44, PR = 14, PT = 14, PB = 26, W = 320;
-  const chartW = W - PL - PR;
-  const chartH = Math.max(160, Math.min(520, pts.length * 6));
-  const H = chartH + PT + PB;
-
-  const xS = v => PL + (v / maxE) * chartW;
-  const yS = d => PT + ((0 - d) / totalD) * chartH;
-
-  // Grille X : pas rond selon l'amplitude
-  const pas = maxE > 40 ? 10 : (maxE > 15 ? 5 : (maxE > 6 ? 2 : 1));
-  let xG = '', xL = '';
-  for (let v = 0; v <= maxE + 0.001; v += pas) {
-    const x = xS(v).toFixed(1);
-    xG += '<line x1="'+x+'" y1="'+PT+'" x2="'+x+'" y2="'+(PT+chartH)+'" stroke="#EAE8E4" stroke-width="0.5"/>';
-    xL += '<text x="'+x+'" y="'+(H-8)+'" text-anchor="middle" font-size="9" fill="#6B6560">'+v+'</text>';
-  }
-
-  // Grille Y : mêmes intervalles que la courbe qd, pour comparer d'un coup d'œil
-  const yStep = totalD <= 5 ? 0.5 : 1;
-  let yG = '', yL = '';
-  for (let dep = 0; dep >= minD - 0.001; dep -= yStep) {
-    const py = yS(dep).toFixed(1);
-    yG += '<line x1="'+PL+'" y1="'+py+'" x2="'+(PL+chartW)+'" y2="'+py+'" stroke="#EAE8E4" stroke-width="0.5"/>';
-    yL += '<text x="'+(PL-4)+'" y="'+(parseFloat(py)+4).toFixed(1)+'" text-anchor="end" font-size="9" fill="#6B6560">'+dep.toFixed(1)+'</text>';
-  }
-
-  let path = '', dots = '';
-  pts.forEach((x, i) => {
-    const px = xS(x.e).toFixed(1), py = yS(x.d).toFixed(1);
-    path += (i === 0 ? 'M' : 'L') + px + ',' + py + ' ';
-    dots += '<circle cx="'+px+'" cy="'+py+'" r="2" fill="'+(x.refus ? '#A32D2D' : '#0F6E56')+'"/>';
-  });
-
-  wrap.innerHTML =
-    '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+
-    xG + yG +
-    '<line x1="'+PL+'" y1="'+PT+'" x2="'+PL+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
-    '<line x1="'+PL+'" y1="'+(PT+chartH)+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
-    '<path d="'+path+'" fill="none" stroke="#0F6E56" stroke-width="1.2" stroke-linejoin="round"/>'+
-    dots + yL + xL +
-    '<text x="'+(PL+chartW/2)+'" y="'+H+'" text-anchor="middle" font-size="9" fill="#6B6560">enfoncement par coup [mm]</text>'+
-    '<text transform="rotate(-90)" x="'+(-(PT+chartH/2))+'" y="11" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>'+
-    '</svg>';
-}
-
-// Un point par coup : profondeur atteinte à la fin du coup, et enfoncement
-// de ce coup. Donnée brute du capteur, sans moyenne.
-function pointsParCoup(passes) {
-  const out = [];
-  profilMesure(passes).forEach(seg => {
-    const eb = seg.p.eb || [];
-    if (!eb.length) return;
-    let cum = seg.d0;
-    eb.forEach(v => {
-      cum += v / 10;                            // mm -> cm
-      out.push({ d: -(cum / 100), e: v, refus: !!seg.p.r });
-    });
-  });
-  return out;
-}
 
 function renderChart() {
   const wrap=document.getElementById('chart-wrap');
@@ -2504,7 +2444,7 @@ function renderChart() {
   // Échelles FIXES : Y de 0 à -5 m (ou plus profond si dépasse), X de 0.1 à 100 MPa
   const minQd = 0.1;
   const maxQd = 100;
-  const minD = Math.min(-5, ...pts.map(x=>x.d), ...ptsM.map(x=>x.d));
+  const minD = Math.min(-5, ...pts.map(x=>x.d), ...ptsM.map(x=>x.d));   // le point vivant reste dans cette plage
   const totalD = Math.abs(minD);
   const cote = (S.cote !== null && S.cote !== undefined) ? parseFloat(S.cote) : NaN;
   const showAlt = !isNaN(cote);
@@ -2550,6 +2490,21 @@ function renderChart() {
     ? '<line x1="'+(PL+chartW)+'" y1="'+PT+'" x2="'+(PL+chartW)+'" y2="'+(PT+chartH)+'" stroke="#0F6E56" stroke-width="1"/>'+
       '<text transform="rotate(90,'+(W-4)+','+(PT+chartH/2)+')" x="'+(W-4)+'" y="'+(PT+chartH/2)+'" text-anchor="middle" font-size="9" fill="#0F6E56">Altimétrie [m]</text>'
     : '';
+  // Point vivant : la passe en cours, avec les coups déjà frappés et
+  // l'enfoncement déjà mesuré. Il se déplace à chaque coup.
+  let live = null;
+  if (typeof _cap !== 'undefined' && _cap.connected && S.coups > 0) {
+    const eLive = capteurEnfoncement();
+    if (eLive > 0.5) {
+      const qdLive = calcQd(S.coups, S.tiges, eLive);
+      if (qdLive !== null && qdLive > 0) {
+        const base = (profMesureeCm(S.passes) !== null)
+                   ? profMesureeCm(S.passes) : profPassesCm(S.passes);
+        live = { d: -((base + eLive/10) / 100), qd: qdLive, n: S.coups, e: eLive };
+      }
+    }
+  }
+
   // Tracé de la série mesurée, superposé sans toucher à la normalisée
   let pathM='', dotsM='';
   ptsM.forEach((x,i)=>{
@@ -2561,6 +2516,18 @@ function renderChart() {
     ? '<path d="'+pathM+'" fill="none" stroke="#0F6E56" stroke-width="1.8" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"/>'+dotsM
     : '';
 
+  // Marqueur creux orange, volontairement différent des points enregistrés :
+  // cette valeur n'est pas figée, elle bouge tant que la passe n'est pas validée.
+  let marqueurLive = '';
+  if (live) {
+    const lx = xS(live.qd), ly = yS(live.d);
+    marqueurLive =
+      '<circle cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" r="6" fill="none" stroke="#854F0B" stroke-width="2"/>'+
+      '<circle cx="'+lx.toFixed(1)+'" cy="'+ly.toFixed(1)+'" r="1.8" fill="#854F0B"/>'+
+      '<text x="'+(lx+9).toFixed(1)+'" y="'+(ly+3.5).toFixed(1)+'" font-size="9" font-weight="600" fill="#854F0B">'+
+        live.qd.toFixed(2)+'</text>';
+  }
+
   wrap.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+
     xG+yG+
     '<line x1="'+PL+'" y1="'+PT+'" x2="'+PL+'" y2="'+(PT+chartH)+'" stroke="#9A9590" stroke-width="1"/>'+
@@ -2568,7 +2535,7 @@ function renderChart() {
     rightAxis+
     serieM+
     '<path d="'+path+'" fill="none" stroke="#185FA5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
-    dots+lbls+yL+yL2+xL+
+    dots+marqueurLive+lbls+yL+yL2+xL+
     '<text x="'+(PL+chartW/2)+'" y="'+H+'" text-anchor="middle" font-size="9" fill="#6B6560">qd [MPa] — échelle log</text>'+
     '<text transform="rotate(-90)" x="'+(-(PT+chartH/2))+'" y="13" text-anchor="middle" font-size="9" fill="#6B6560">Profondeur [m]</text>'+
     '</svg>';
@@ -2580,12 +2547,14 @@ function renderChart() {
         '<div><span style="display:inline-block;width:22px;border-top:2px solid #185FA5;vertical-align:middle;"></span> ' +
         'qd normalisé — passes de 10 cm (NF P 94-115)</div>' +
         '<div><span style="display:inline-block;width:22px;border-top:2px dashed #0F6E56;vertical-align:middle;"></span> ' +
-        'qd mesuré — enfoncement réel du capteur</div>';
+        'qd mesuré — enfoncement réel du capteur</div>' +
+        (live ? '<div><span style="display:inline-block;width:11px;height:11px;border:2px solid #854F0B;border-radius:50%;vertical-align:middle;"></span> ' +
+                'passe en cours — ' + live.n + ' coup(s), ' + live.e.toFixed(1) + ' mm · qd = ' +
+                live.qd.toFixed(2) + ' MPa</div>' : '');
     } else {
       lg.innerHTML = '<span style="color:var(--text2)">Connectez le capteur pour superposer la série mesurée.</span>';
     }
   }
-  renderChartCoups();
 
   const c=S.cfg;
   document.getElementById('params-summary').innerHTML='M='+c.M+'kg · h='+c.h+'m · A='+c.A+'cm²<br>Mg='+c.Mg+'kg · Mt='+c.Mt+'kg · Mp='+c.Mp+'kg<br><span style="font-size:11px;">qd=(M·g·h)/(A·e/N)·M/(M+Mg+Mp+n·Mt)/10⁶</span>';
