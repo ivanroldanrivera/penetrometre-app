@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v38</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v39</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1413,7 +1413,8 @@ let _cap = {
   ref:0,                // origine de la passe en cours
   seuilAtteint:false,   // évite de redéclencher en boucle
   lastSeen:0,
-  posCoups:[]           // position relevée à chaque coup de la passe en cours
+  posCoups:[],          // position relevée à chaque coup de la passe en cours
+  tCoup:0               // horodatage du dernier coup, pour juger sa stabilité
 };
 
 // ── Enfoncement par coup ──────────────────────────────────────────────
@@ -1428,10 +1429,23 @@ let _cap = {
 // le mouvement du précédent est terminé depuis longtemps. C'est plus
 // robuste qu'une fenêtre de mesure calée sur un délai fixe.
 
+// Cadence de frappe constatée sur le terrain : au plus un coup toutes les
+// 0,5 s. On considère donc l'enfoncement d'un coup terminé après 300 ms
+// sans nouveau coup — il reste 200 ms de marge avant le suivant.
+// Sans cela le dernier coup n'apparaissait qu'à l'arrivée du suivant.
+const COUP_STABLE_MS = 300;
+
 function _capteurNoterCoup(n) {
   if (!_cap.connected) return;
   const k = Math.max(1, n || 1);
   for (let i = 0; i < k; i++) _cap.posCoups.push(_cap.mm);
+  _cap.tCoup = Date.now();
+}
+
+// Le dernier coup est-il stabilisé ?
+function _capteurDernierCoupStable() {
+  return _cap.posCoups.length > 0 && _cap.tCoup > 0 &&
+         (Date.now() - _cap.tCoup) >= COUP_STABLE_MS;
 }
 
 function _capteurRetirerCoup(n) {
@@ -1553,6 +1567,10 @@ function bleOnData(ev) {
   _cap.ads   = (dv.getUint8(8) & 0x01) === 0x01;
   _cap.lastSeen = Date.now();
   renderCapteur();
+  // Le tableau ne se reconstruit que si le nombre de lignes change : c'est
+  // ce qui fait apparaître le dernier coup dès qu'il est stabilisé, sans
+  // reconstruire cent lignes vingt fois par seconde.
+  renderCoupsTables();
   renderChartLive();        // la courbe suit l'enfoncement en direct
   capteurVerifierSeuil();
 }
@@ -1713,7 +1731,11 @@ function saveCapteurCfg() {
 // On filtre les basses (vent, moteur, pas), on suit la crête d'amplitude et on
 // déclenche sur front montant au-dessus d'un seuil, avec hystérésis (évite de
 // re-déclencher sur la traîne du même coup) + temps de garde (anti-rebond).
-const AUDIO_DEFAULTS = { seuil:0.30, garde:180, hpf:1200, gain:1, vib:false };
+// Temps de garde à 300 ms : sur le terrain la cadence ne dépasse pas un coup
+// toutes les 0,5 s, donc tout ce qui arrive dans les 300 ms suivant une frappe
+// est forcément un rebond ou un écho, jamais un vrai coup. Élargir cette
+// fenêtre est le moyen le plus simple de supprimer les faux doublons.
+const AUDIO_DEFAULTS = { seuil:0.30, garde:300, hpf:1200, gain:1, vib:false };
 
 function audioCfg() {
   if (!APP.audioCfg) APP.audioCfg = Object.assign({}, AUDIO_DEFAULTS);
@@ -2482,12 +2504,14 @@ function pointsQdParCoup(passes) {
   // Coups de la passe EN COURS, avant toute validation. Sans cela il faudrait
   // valider une passe pour voir apparaître quoi que ce soit.
   //
-  // Le dernier coup est volontairement exclu : son enfoncement n'est pas
-  // terminé tant que le coup suivant n'est pas tombé, et un qd calculé sur
-  // un déplacement encore nul partirait à plusieurs centaines de MPa.
+  // Le dernier coup n'est inclus qu'une fois stabilisé (300 ms sans nouveau
+  // coup). Publié trop tôt, son enfoncement serait encore proche de zéro et
+  // le qd partirait à plusieurs centaines de MPa. La valeur se corrige seule
+  // au coup suivant, puisque tout est recalculé depuis les positions.
   if (typeof _cap !== 'undefined' && _cap.connected) {
     const enCours = _capteurEnfoncementsParCoup();
-    enCours.slice(0, -1).forEach((v, ic) => {
+    const retenus = _capteurDernierCoupStable() ? enCours : enCours.slice(0, -1);
+    retenus.forEach((v, ic) => {
       cum += v / 10;
       num++;
       const q = calcQd(1, S.tiges, Math.max(v, E_COUP_MIN_MM));
