@@ -222,6 +222,24 @@
   /* Note indicator */
   .note-icon { font-size:11px; color:var(--blue); margin-left:4px; }
   .modal-textarea { width:100%; min-height:60px; padding:10px; font-size:13px; font-family:inherit; border:0.5px solid var(--border); border-radius:var(--radius-sm); background:var(--bg2); color:var(--text); resize:vertical; box-sizing:border-box; margin-bottom:8px; }
+  /* ── CAPTEUR DE PROFONDEUR (BLE) ── */
+  .cap-main { display:flex; align-items:baseline; justify-content:center; gap:8px; margin:6px 0 2px; }
+  .cap-mm { font-size:46px; font-weight:200; color:var(--green); line-height:1; }
+  .cap-unit { font-size:16px; color:var(--text2); }
+  .cap-sub { text-align:center; font-size:11px; color:var(--text2); margin-bottom:10px; }
+  .cap-bar { position:relative; height:14px; background:var(--bg2); border:0.5px solid var(--border); border-radius:7px; overflow:hidden; margin-bottom:4px; }
+  .cap-fill { height:100%; width:0%; background:var(--green); transition:width 0.08s linear; }
+  .cap-bar.done .cap-fill { background:var(--orange); }
+  .cap-scale { display:flex; justify-content:space-between; font-size:9px; color:var(--text2); margin-bottom:10px; }
+  .btn-ble { width:100%; padding:14px; font-size:14px; border:none; border-radius:var(--radius-sm); cursor:pointer; background:var(--blue); color:#fff; letter-spacing:0.03em; }
+  .btn-ble:active { opacity:0.85; }
+  .btn-ble.on { background:var(--bg2); color:var(--text); border:0.5px solid var(--border); }
+  .btn-ble[disabled] { opacity:0.45; }
+  .cap-chip { font-size:10px; color:var(--text2); background:var(--bg2); padding:3px 9px; border-radius:20px; border:0.5px solid var(--border); }
+  .cap-chip.on { color:var(--green); border-color:#9DC96A; background:#EAF3DE; }
+  .cap-chip.err { color:var(--red); border-color:#F09595; background:var(--red-bg); }
+  .cap-warn { font-size:10px; color:var(--orange); background:var(--orange-bg); border-radius:6px; padding:7px 10px; margin-top:8px; line-height:1.5; }
+
   /* ── COMPTAGE AUDIO ── */
   .level-wrap { position:relative; height:22px; background:var(--bg2); border:0.5px solid var(--border); border-radius:6px; overflow:hidden; }
   .level-bar { height:100%; width:0%; background:linear-gradient(90deg,#0F6E56 0%,#0F6E56 45%,#854F0B 72%,#A32D2D 100%); }
@@ -249,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v26</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v27</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -301,6 +319,33 @@
       </div>
       <button class="btn-valider" onclick="validerPasse()">✓ Valider passe (+10 cm)</button>
       <button class="btn-refus"   onclick="marquerRefus()">⚠ Refus</button>
+    </div>
+
+    <!-- ── CAPTEUR DE PROFONDEUR (Bluetooth) ── -->
+    <div class="card" id="capteur-card">
+      <div class="sort-row">
+        <div class="clabel" style="margin-bottom:0">Capteur de profondeur</div>
+        <span class="cap-chip" id="cap-status">Non connecté</span>
+      </div>
+
+      <div class="cap-main">
+        <span class="cap-mm" id="cap-mm">—</span>
+        <span class="cap-unit">mm</span>
+      </div>
+      <div class="cap-sub" id="cap-sub">enfoncement depuis le début de la passe</div>
+
+      <div class="cap-bar" id="cap-bar"><div class="cap-fill" id="cap-fill"></div></div>
+      <div class="cap-scale"><span>0</span><span>5 cm</span><span>10 cm</span></div>
+
+      <button class="btn-ble" id="cap-btn" onclick="bleToggle()">🔗 Connecter le capteur</button>
+      <div class="btn-row2" style="margin-top:8px;">
+        <button class="btn-sm" onclick="capteurRef()">⌖ Origine passe</button>
+        <button class="btn-sm" onclick="capteurTare()">↺ Tare capteur</button>
+      </div>
+
+      <div id="cap-hint" style="font-size:10px;color:var(--text2);text-align:center;margin-top:8px;line-height:1.5;">
+        La profondeur se remet à zéro à chaque passe validée.
+      </div>
     </div>
 
     <!-- ── COMPTAGE AUTOMATIQUE PAR MICRO ── -->
@@ -472,6 +517,41 @@
       <div class="irow"><label>Longueur tige (m)</label>        <input type="number" id="cfg-Lt" value="0.5"  step="0.1"/></div>
       <button class="btn-save" onclick="saveConfig()">Enregistrer</button>
     </div>
+    <div class="card">
+      <div class="clabel">Calibration du capteur de profondeur</div>
+      <div class="cap-sub" id="cfg-cap-state" style="margin-bottom:10px;">Capteur non connecté</div>
+
+      <div class="cap-bar" style="margin-bottom:4px;"><div class="cap-fill" id="cfg-cap-fill" style="background:var(--blue);"></div></div>
+      <div class="cap-scale" style="margin-bottom:12px;">
+        <span>rapport mesuré</span><span id="cfg-cap-ratio">—</span>
+      </div>
+
+      <div class="cap-sub" style="text-align:left;margin-bottom:10px;line-height:1.6;">
+        Câble entièrement rentré → <strong>MIN</strong>.<br>
+        Câble sorti en butée (ou 10 tours du bouton) → <strong>MAX</strong>.
+      </div>
+      <div class="btn-row2">
+        <button class="btn-sm" onclick="bleCmd(1)">MIN = 0 mm</button>
+        <button class="btn-sm" onclick="bleCmd(2)">MAX = 1500 mm</button>
+      </div>
+
+      <label class="modal-check" style="margin-top:12px;">
+        <input type="checkbox" id="cfg-cap-auto" onchange="saveCapteurCfg()"/>
+        Valider la passe automatiquement à 10 cm
+      </label>
+      <div style="font-size:10px;color:var(--text2);line-height:1.5;margin-top:4px;">
+        Désactivé, l'app se contente de signaler le seuil atteint — tu gardes la main
+        sur le nombre de coups avant de valider.
+      </div>
+
+      <div class="irow" style="margin-top:12px;">
+        <label>Seuil passe (mm)</label>
+        <input type="number" id="cfg-cap-seuil" min="10" max="500" step="5" onchange="saveCapteurCfg()"/>
+      </div>
+
+      <button class="btn-sm" style="width:100%;margin-top:8px;" onclick="bleCmd(4)">↺ Effacer la calibration du capteur</button>
+    </div>
+
     <div class="card">
       <div class="clabel">Calibration micro — détection des coups</div>
       <div class="level-wrap" style="margin-bottom:4px;">
@@ -804,8 +884,10 @@ function load() {
   if (!DB.activeId || !_activeSondage()) _setActive(DB.sondages[0].id);
 
   audioCfg();                 // garantit la présence de la config micro
+  capteurCfg();               // idem pour la config capteur
   syncFields(); render();
   syncAudioFields(); _audioUpdateUI();
+  syncCapteurFields();
 }
 
 // Sauvegarde différée : sérialiser toute la base (photos incluses) à chaque coup
@@ -878,6 +960,14 @@ function addCoup(d) {
 }
 function resetCoup() { S.coups = 0; _audioResetCount(); save(); render(); }
 
+// L'origine du capteur suit la passe en cours, comme le compteur de coups
+function _capteurResetRef() {
+  if (typeof _cap === 'undefined') return;
+  _cap.ref = _cap.mm;
+  _cap.seuilAtteint = false;
+  if (typeof renderCapteur === 'function') renderCapteur();
+}
+
 // Le compteur « coups détectés » suit la passe en cours (comme S.coups)
 function _audioResetCount() {
   if (typeof _au === 'undefined') return;
@@ -892,7 +982,7 @@ function setCoupManual() {
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() });
-  S.coups = 0; _audioResetCount(); save(); render();
+  S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
   // Auto-prompt : ouvrir le modal tiges quand depth atteint (n_tiges × Lt) − 0.1 m
   const Lt = S.cfg.Lt || 0.5;
   const thresholdCm = Math.round(S.tiges * Lt * 100 - 10);
@@ -907,7 +997,7 @@ function validerPasse() {
 function marquerRefus() {
   if (!confirm('Marquer un REFUS à ' + depth() + ' cm ?')) return;
   S.passes.push({ d0:depth(), d1:depth()+10, c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() });
-  S.coups = 0; _audioResetCount(); save(); render();
+  S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
 }
 
 // ══ TIGES MODAL (depuis bloc tiges en saisie) ══════════════════════════
@@ -948,6 +1038,9 @@ function updateTigesModalUI() {
   const p2 = document.getElementById('tig-sub-p2'); if (p2) p2.textContent = fm(2*Lt);
 }
 function saveTigesModal() {
+  // Ajouter une tige fait remonter la tête : l'origine du capteur n'a plus
+  // de sens, on la reprend sur la position courante.
+  if (S.tiges !== tigesModalTemp) _capteurResetRef();
   S.tiges = tigesModalTemp; save(); render(); closeTigesModalDirect();
 }
 function closeTigesModal(e) { if (e.target.id === 'tiges-modal') closeTigesModalDirect(); }
@@ -1141,6 +1234,231 @@ function renderPhotos() {
       '<input type="text" class="photo-caption" placeholder="Légende…" value="' + cap + '" onchange="setPhotoCaption(\'' + p.id + '\', this.value)">' +
       '</div>';
   }).join('');
+}
+
+// ══ CAPTEUR DE PROFONDEUR (Bluetooth BLE) ═════════════════════════════
+// Le capteur n'envoie qu'une position. Le comptage des coups reste
+// entièrement dans l'app : une correction de faux coup est locale et
+// instantanée, sans aller-retour avec le module.
+//
+// Web Bluetooth n'existe que sur Chrome/Android. Sur iPhone l'app
+// fonctionne normalement, seule cette carte reste inactive.
+
+const BLE_SERVICE  = 'b7e3f000-5a1c-4f2e-9d3b-7c8a1e6f4d20';
+const BLE_POSITION = 'b7e3f001-5a1c-4f2e-9d3b-7c8a1e6f4d20';
+const BLE_COMMANDE = 'b7e3f002-5a1c-4f2e-9d3b-7c8a1e6f4d20';
+
+const CAP_DEFAUTS = { seuil: 100, auto: false };   // seuil en mm
+
+function capteurCfg() {
+  if (!APP.capteurCfg) APP.capteurCfg = Object.assign({}, CAP_DEFAUTS);
+  for (const k in CAP_DEFAUTS) {
+    if (APP.capteurCfg[k] === undefined || APP.capteurCfg[k] === null) {
+      APP.capteurCfg[k] = CAP_DEFAUTS[k];
+    }
+  }
+  return APP.capteurCfg;
+}
+
+let _cap = {
+  device:null, server:null, charPos:null, charCmd:null,
+  connected:false, connecting:false,
+  mm:0,                 // position absolue renvoyée par le module
+  ratio:0, ads:false,
+  ref:0,                // origine de la passe en cours
+  seuilAtteint:false,   // évite de redéclencher en boucle
+  lastSeen:0
+};
+
+function bleDispo() {
+  return (typeof navigator !== 'undefined') && !!navigator.bluetooth;
+}
+
+// Enfoncement depuis le début de la passe courante
+function capteurEnfoncement() { return _cap.mm - _cap.ref; }
+
+async function bleToggle() {
+  if (_cap.connected) { bleDisconnect(); return; }
+  await bleConnect();
+}
+
+async function bleConnect() {
+  if (!bleDispo()) {
+    alert("Bluetooth non disponible sur ce navigateur.\n\n" +
+          "Web Bluetooth fonctionne sur Chrome sous Android. " +
+          "Safari (iPhone/iPad) ne le prend pas en charge — le reste de " +
+          "l'application fonctionne normalement.");
+    return;
+  }
+  const btn = document.getElementById('cap-btn');
+  try {
+    _cap.connecting = true;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Recherche…'; }
+
+    _cap.device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BLE_SERVICE] }]
+    });
+    _cap.device.addEventListener('gattserverdisconnected', bleOnDisconnect);
+
+    _cap.server  = await _cap.device.gatt.connect();
+    const svc    = await _cap.server.getPrimaryService(BLE_SERVICE);
+    _cap.charPos = await svc.getCharacteristic(BLE_POSITION);
+    _cap.charCmd = await svc.getCharacteristic(BLE_COMMANDE);
+
+    _cap.charPos.addEventListener('characteristicvaluechanged', bleOnData);
+    await _cap.charPos.startNotifications();
+
+    _cap.connected  = true;
+    _cap.connecting = false;
+    _cap.seuilAtteint = false;
+    _requestWakeLock();          // empêche la veille pendant la mesure
+    renderCapteur();
+  } catch(e) {
+    _cap.connecting = false;
+    _cap.connected  = false;
+    if (!e || e.name !== 'NotFoundError') {      // NotFoundError = annulation
+      alert("Connexion au capteur impossible.\n\n" + ((e && e.message) || e));
+    }
+    renderCapteur();
+  }
+}
+
+function bleDisconnect() {
+  try {
+    if (_cap.device && _cap.device.gatt && _cap.device.gatt.connected) {
+      _cap.device.gatt.disconnect();
+    }
+  } catch(e) {}
+  bleOnDisconnect();
+}
+
+function bleOnDisconnect() {
+  _cap.connected = false;
+  _cap.charPos = null; _cap.charCmd = null; _cap.server = null;
+  renderCapteur();
+}
+
+function bleOnData(ev) {
+  const dv = ev.target.value;
+  if (!dv || dv.byteLength < 9) return;
+  _cap.mm    = dv.getFloat32(0, true);
+  _cap.ratio = dv.getFloat32(4, true);
+  _cap.ads   = (dv.getUint8(8) & 0x01) === 0x01;
+  _cap.lastSeen = Date.now();
+  renderCapteur();
+  capteurVerifierSeuil();
+}
+
+// Envoi d'une commande au module (1=MIN, 2=MAX, 3=tare, 4=effacer)
+async function bleCmd(code) {
+  if (!_cap.connected || !_cap.charCmd) {
+    alert('Capteur non connecté.');
+    return;
+  }
+  try {
+    await _cap.charCmd.writeValue(new Uint8Array([code]));
+    const msg = { 1:'Point bas enregistré.', 2:'Point haut enregistré.',
+                  3:'Tare effectuée.', 4:'Calibration effacée.' }[code] || 'Commande envoyée.';
+    const el = document.getElementById('cfg-cap-state');
+    if (el) el.textContent = msg;
+  } catch(e) {
+    alert('Envoi impossible : ' + ((e && e.message) || e));
+  }
+}
+
+// ── Origine de la passe ───────────────────────────────────────────────
+// Remise à zéro logicielle : l'app garde sa propre référence, le module
+// n'est pas sollicité. C'est ce qui rend l'opération instantanée.
+function capteurRef() {
+  _cap.ref = _cap.mm;
+  _cap.seuilAtteint = false;
+  renderCapteur();
+}
+
+function capteurTare() {
+  if (!_cap.connected) { alert('Capteur non connecté.'); return; }
+  bleCmd(3);
+  _cap.ref = 0;
+  _cap.seuilAtteint = false;
+}
+
+function capteurVerifierSeuil() {
+  if (!_cap.connected) return;
+  const c = capteurCfg();
+  const e = capteurEnfoncement();
+  if (e < c.seuil) { if (e < c.seuil * 0.8) _cap.seuilAtteint = false; return; }
+  if (_cap.seuilAtteint) return;
+  _cap.seuilAtteint = true;
+  if (c.auto) validerPasse();
+  else if (navigator.vibrate) { try { navigator.vibrate([40,60,40]); } catch(e2) {} }
+}
+
+// ── Affichage ─────────────────────────────────────────────────────────
+function renderCapteur() {
+  const c   = capteurCfg();
+  const btn = document.getElementById('cap-btn');
+  const st  = document.getElementById('cap-status');
+  const mm  = document.getElementById('cap-mm');
+  const fil = document.getElementById('cap-fill');
+  const bar = document.getElementById('cap-bar');
+  const sub = document.getElementById('cap-sub');
+  const hint= document.getElementById('cap-hint');
+
+  if (btn) {
+    btn.disabled = false;
+    btn.classList.toggle('on', _cap.connected);
+    btn.textContent = _cap.connected ? '⛔ Déconnecter' : '🔗 Connecter le capteur';
+  }
+  if (st) {
+    st.classList.remove('on','err');
+    if (_cap.connected)      { st.textContent = '● Connecté'; st.classList.add('on'); }
+    else if (!bleDispo())    { st.textContent = 'Indisponible'; st.classList.add('err'); }
+    else                     { st.textContent = 'Non connecté'; }
+  }
+
+  const e = _cap.connected ? capteurEnfoncement() : null;
+  if (mm)  mm.textContent = (e === null) ? '—' : e.toFixed(1);
+  const pct = (e === null) ? 0 : Math.max(0, Math.min(100, (e / c.seuil) * 100));
+  if (fil) fil.style.width = pct + '%';
+  if (bar) bar.classList.toggle('done', e !== null && e >= c.seuil);
+  if (sub) {
+    sub.textContent = (e !== null && e >= c.seuil)
+      ? '✓ ' + (c.seuil/10).toFixed(0) + ' cm atteints — passe complète'
+      : 'enfoncement depuis le début de la passe';
+  }
+  if (hint && !bleDispo()) {
+    hint.innerHTML = 'Bluetooth non pris en charge par ce navigateur.<br>' +
+                     'Utilisez Chrome sous Android ; sur iPhone la saisie manuelle reste disponible.';
+  }
+
+  // Onglet Config
+  const cs = document.getElementById('cfg-cap-state');
+  const cr = document.getElementById('cfg-cap-ratio');
+  const cf = document.getElementById('cfg-cap-fill');
+  if (cr) cr.textContent = _cap.connected ? _cap.ratio.toFixed(5) : '—';
+  if (cf) cf.style.width = (_cap.connected ? _cap.ratio * 100 : 0) + '%';
+  if (cs && _cap.connected && !cs.dataset.msg) {
+    cs.textContent = 'Capteur connecté · position absolue ' + _cap.mm.toFixed(1) + ' mm' +
+                     (_cap.ads ? ' · ADS1115' : ' · ADC interne');
+  } else if (cs && !_cap.connected) {
+    cs.textContent = 'Capteur non connecté';
+  }
+}
+
+function syncCapteurFields() {
+  const c = capteurCfg();
+  const a = document.getElementById('cfg-cap-auto');   if (a) a.checked = !!c.auto;
+  const s = document.getElementById('cfg-cap-seuil');  if (s) s.value   = c.seuil;
+  renderCapteur();
+}
+
+function saveCapteurCfg() {
+  const c = capteurCfg();
+  const a = document.getElementById('cfg-cap-auto');
+  const s = document.getElementById('cfg-cap-seuil');
+  if (a) c.auto  = !!a.checked;
+  if (s) c.seuil = Math.min(500, Math.max(10, parseInt(s.value) || CAP_DEFAUTS.seuil));
+  save(); syncCapteurFields();
 }
 
 // ══ COMPTAGE AUTOMATIQUE PAR MICRO ════════════════════════════════════
@@ -1898,7 +2216,7 @@ function showTab(t){
   document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
   if(t==='graphique') renderChart();
   if(t==='sondages') renderSondagesTab();
-  if(t==='config') syncAudioFields();
+  if(t==='config') { syncAudioFields(); syncCapteurFields(); }
 }
 
 // ══ MAP ═══════════════════════════════════════════════════════════════
