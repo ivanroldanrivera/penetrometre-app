@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v40</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v41</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1716,6 +1716,9 @@ function renderCapteur() {
   if (fil) fil.style.width = pct + '%';
   if (bar) bar.classList.toggle('done', e !== null && e >= c.seuil);
 
+  // La profondeur en tête d'écran suit la tige en direct sous pilotage
+  if (typeof renderProfondeur === 'function') renderProfondeur();
+
   // Même barre, répétée sous « Couche N° » dans le bloc Profondeur & Tiges
   const bc = document.getElementById('cap-bar-couche');
   if (bc) {
@@ -2484,12 +2487,50 @@ function buildTable(passes, showQd) {
   return h + '</table>';
 }
 
+// Profondeur courante affichée en tête de l'onglet Saisie.
+// Sans pilotage : fin de la dernière passe validée — elle ne bouge qu'à la
+// validation, comme avant. Avec pilotage : on y ajoute l'enfoncement en
+// cours, donc le chiffre descend en direct pendant que la tige s'enfonce.
+function profondeurCouranteCm() {
+  const base = depth();
+  if (typeof capteurCfg !== 'function') return base;
+  const c = capteurCfg();
+  if (c.pilote && typeof _cap !== 'undefined' && _cap.connected) {
+    const e = capteurEnfoncement();
+    if (isFinite(e) && e > 0) return base + e / 10;
+  }
+  return base;
+}
+
+// Affichage à part : appelé par render() mais aussi par le flux capteur,
+// pour que le chiffre suive la tige sans attendre une action de l'opérateur.
+function _fmtCm(v) {
+  return (Math.abs(v - Math.round(v)) < 0.05) ? String(Math.round(v)) : v.toFixed(1);
+}
+
+function renderProfondeur() {
+  const base = depth();
+  const cour = profondeurCouranteCm();
+  const enDirect = cour > base + 0.001;
+  const dv = document.getElementById('depth-val');
+  const du = document.getElementById('depth-unit');
+  const ll = document.getElementById('layer-label');
+  if (dv) dv.textContent = _fmtCm(cour);
+  if (du) du.textContent = 'cm (' + (cour / 100).toFixed(2) + ' m)';
+  if (ll) {
+    const ln = S.passes.length + 1;
+    if (enDirect) {
+      ll.textContent = 'Couche ' + ln + ' · ' + _fmtCm(base) + ' → ' + _fmtCm(cour) + ' cm';
+    } else {
+      const pas = (typeof capteurCfg === 'function') ? capteurCfg().seuil / 10 : 10;
+      ll.textContent = 'Couche ' + ln + ' · ' + _fmtCm(base) + '–' + _fmtCm(base + pas) + ' cm';
+    }
+  }
+}
+
 function render() {
-  const d=depth(), ln=S.passes.length+1;
   document.getElementById('topbar-title').textContent=(S.cfg.chantier?S.cfg.chantier+' · ':'')+S.cfg.sondage;
-  document.getElementById('depth-val').textContent  =d;
-  document.getElementById('depth-unit').textContent ='cm (' + (d/100).toFixed(2) + ' m)';
-  document.getElementById('layer-label').textContent='Couche '+ln+' · '+d+'–'+(d+10)+' cm';
+  renderProfondeur();
   document.getElementById('coup-val').textContent   =S.coups;
   document.getElementById('tiges-val').textContent  =S.tiges;
   document.getElementById('tiges-m').textContent    =tigesM(S.tiges)+' m';
