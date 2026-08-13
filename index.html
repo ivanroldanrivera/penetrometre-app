@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v39</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v40</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -301,6 +301,13 @@
         </div>
       </div>
       <div class="layer-chip" id="layer-label">Couche 1 · 0–10 cm</div>
+
+      <div id="cap-bar-couche" class="hidden" style="margin:-8px 0 16px;">
+        <div class="cap-bar"><div class="cap-fill" id="cap-fill2"></div></div>
+        <div class="cap-scale">
+          <span>0</span><span id="cap-mm2">—</span><span id="cap-seuil2">10 cm</span>
+        </div>
+      </div>
 
       <div class="coup-center">
         <div class="coup-num" id="coup-val">0</div>
@@ -355,6 +362,10 @@
         <button class="btn-sm" onclick="capteurRef()">⌖ Origine passe</button>
         <button class="btn-sm" onclick="capteurTare()">↺ Tare capteur</button>
       </div>
+
+      <button class="btn-sm" id="cap-pilote-btn" style="width:100%;margin-top:8px;"
+              onclick="togglePilote()">⛓ Le capteur pilote la profondeur : NON</button>
+      <div id="cap-pilote-info" style="font-size:10px;color:var(--text2);line-height:1.5;margin-top:6px;"></div>
 
       <div id="cap-hint" style="font-size:10px;color:var(--text2);text-align:center;margin-top:8px;line-height:1.5;">
         La profondeur se remet à zéro à chaque passe validée.
@@ -981,7 +992,31 @@ function switchChantier(id) {
 
 // ══ HELPERS ═══════════════════════════════════════════════════════════
 function tigesM(n) { return (n * (S.cfg.Lt || 0.5)).toFixed(2); }
-function depth()   { return S.passes.length * 10; }
+// Profondeur courante = fin de la dernière passe.
+// Sans capteur pilote, chaque passe fait 10 cm et on retombe exactement sur
+// l'ancien calcul (nb × 10). Avec le pilotage, les passes ont leur hauteur
+// réelle et la profondeur suit.
+function depth() {
+  if (!S.passes.length) return 0;
+  const dernier = S.passes[S.passes.length - 1];
+  return (typeof dernier.d1 === 'number') ? dernier.d1 : S.passes.length * 10;
+}
+
+// Hauteur d'une passe pour la grille, en cm
+function hPasse(p) {
+  return (p && typeof p.h === 'number' && p.h > 0) ? p.h : 10;
+}
+
+// Recalcule les profondeurs en chaîne après une suppression ou une édition
+function rechainerPasses() {
+  let cum = 0;
+  S.passes.forEach(p => {
+    const h = hPasse(p);
+    p.d0 = Math.round(cum * 10) / 10;
+    cum += h;
+    p.d1 = Math.round(cum * 10) / 10;
+  });
+}
 
 // ══ qd FORMULA ════════════════════════════════════════════════════════
 // eMm : enfoncement réellement mesuré de la passe, en millimètres.
@@ -1087,7 +1122,9 @@ function setCoupManual() {
 
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
-  const p = { d0:depth(), d1:depth()+10, c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() };
+  const h = hauteurPasseValidee();
+  const p = { d0:depth(), d1:Math.round((depth()+h)*10)/10, h:h,
+              c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() };
   _capteurAnnoterPasse(p);
   S.passes.push(p);
   S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
@@ -1104,7 +1141,9 @@ function validerPasse() {
 
 function marquerRefus() {
   if (!confirm('Marquer un REFUS à ' + depth() + ' cm ?')) return;
-  const p = { d0:depth(), d1:depth()+10, c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() };
+  const h = hauteurPasseValidee();
+  const p = { d0:depth(), d1:Math.round((depth()+h)*10)/10, h:h,
+              c:S.coups, r:true, n:S.tiges, t:new Date().toISOString() };
   _capteurAnnoterPasse(p);
   S.passes.push(p);
   S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
@@ -1259,7 +1298,7 @@ function deleteRow() {
   const p = S.passes[editIdx];
   if (!confirm('Supprimer la passe ' + p.d0 + '–' + p.d1 + ' cm ?')) return;
   S.passes.splice(editIdx, 1);
-  S.passes = S.passes.map((p, i) => ({ ...p, d0:i*10, d1:i*10+10 }));
+  rechainerPasses();
   save(); render(); closeEditModalDirect();
 }
 
@@ -1393,7 +1432,7 @@ const BLE_SERVICE  = 'b7e3f000-5a1c-4f2e-9d3b-7c8a1e6f4d20';
 const BLE_POSITION = 'b7e3f001-5a1c-4f2e-9d3b-7c8a1e6f4d20';
 const BLE_COMMANDE = 'b7e3f002-5a1c-4f2e-9d3b-7c8a1e6f4d20';
 
-const CAP_DEFAUTS = { seuil: 100, auto: false };   // seuil en mm
+const CAP_DEFAUTS = { seuil: 100, auto: false, pilote: false };   // seuil en mm
 
 function capteurCfg() {
   if (!APP.capteurCfg) APP.capteurCfg = Object.assign({}, CAP_DEFAUTS);
@@ -1486,9 +1525,10 @@ function _capteurAnnoterPasse(p) {
   if (!isFinite(e)) return;
   p.e  = e;
   p.eb = _capteurEnfoncementsParCoup();                   // détail par coup
-  // Passe incomplète : l'opérateur a validé avant d'atteindre le seuil
+  // Passe non standard : hauteur mesurée s'écartant de la tranche nominale,
+  // trop courte (arrêt, refus) comme trop longue (sol très mou, cavité).
   const seuil = capteurCfg().seuil;
-  p.part = (e < seuil * 0.95);
+  p.part = (e < seuil * 0.95) || (e > seuil * 1.05);
 }
 
 function bleDispo() {
@@ -1601,6 +1641,32 @@ function capteurRef() {
   renderCapteur();
 }
 
+// ── Pilotage de la profondeur par le capteur ──────────────────────────
+// Désactivé : chaque passe vaut 10 cm, comme la norme le prévoit.
+// Activé : la passe prend sa hauteur réellement mesurée. Utile quand le
+// terrain ne se laisse pas découper en tranches de 10 cm — sol très mou,
+// cavité, remblai lâche, où un seul coup peut franchir plusieurs tranches.
+function hauteurPasseValidee() {
+  const c = capteurCfg();
+  if (!c.pilote) return 10;
+  if (typeof _cap === 'undefined' || !_cap.connected) return 10;
+  const mm = capteurEnfoncement();
+  if (!(mm > 0)) return 10;
+  return Math.round(mm / 10 * 10) / 10;         // mm -> cm, au dixième
+}
+
+function togglePilote() {
+  const c = capteurCfg();
+  c.pilote = !c.pilote;
+  save(); render(); syncCapteurFields();
+}
+
+// Nombre de tranches de 10 cm franchies par la passe en cours
+function tranchesFranchies() {
+  if (typeof _cap === 'undefined' || !_cap.connected) return 0;
+  return Math.floor(capteurEnfoncement() / capteurCfg().seuil);
+}
+
 function capteurTare() {
   if (!_cap.connected) { alert('Capteur non connecté.'); return; }
   bleCmd(3);
@@ -1649,6 +1715,41 @@ function renderCapteur() {
   const pct = (e === null) ? 0 : Math.max(0, Math.min(100, (e / c.seuil) * 100));
   if (fil) fil.style.width = pct + '%';
   if (bar) bar.classList.toggle('done', e !== null && e >= c.seuil);
+
+  // Même barre, répétée sous « Couche N° » dans le bloc Profondeur & Tiges
+  const bc = document.getElementById('cap-bar-couche');
+  if (bc) {
+    bc.classList.toggle('hidden', !_cap.connected);
+    const f2 = document.getElementById('cap-fill2');
+    const m2 = document.getElementById('cap-mm2');
+    const s2 = document.getElementById('cap-seuil2');
+    if (f2) f2.style.width = pct + '%';
+    if (m2) m2.textContent = (e === null) ? '—' : e.toFixed(0) + ' mm';
+    if (s2) s2.textContent = (c.seuil / 10).toFixed(0) + ' cm';
+    const b2 = bc.querySelector('.cap-bar');
+    if (b2) b2.classList.toggle('done', e !== null && e >= c.seuil);
+  }
+
+  // Bouton de pilotage et avertissement multi-tranches
+  const pb = document.getElementById('cap-pilote-btn');
+  if (pb) {
+    pb.textContent = '⛓ Le capteur pilote la profondeur : ' + (c.pilote ? 'OUI' : 'NON');
+    pb.style.background = c.pilote ? 'var(--green)' : '';
+    pb.style.color      = c.pilote ? '#fff' : '';
+  }
+  const pi = document.getElementById('cap-pilote-info');
+  if (pi) {
+    const tr = tranchesFranchies();
+    if (!c.pilote) {
+      pi.innerHTML = 'Chaque passe vaut 10 cm, comme la norme. Le capteur mesure sans rien changer.';
+    } else if (tr >= 2 && e !== null) {
+      pi.innerHTML = '<span style="color:var(--orange)">⚠ ' + (e/10).toFixed(1) + ' cm parcourus — ' +
+        tr + ' tranches de 10 cm franchies. La passe sera enregistrée en une seule ligne ' +
+        'de ' + (e/10).toFixed(1) + ' cm, ce qui est la façon correcte de noter un sol très mou.</span>';
+    } else {
+      pi.innerHTML = 'La passe prendra sa hauteur réellement mesurée à la validation.';
+    }
+  }
   if (sub) {
     sub.textContent = (e !== null && e >= c.seuil)
       ? '✓ ' + (c.seuil/10).toFixed(0) + ' cm atteints — passe complète'
