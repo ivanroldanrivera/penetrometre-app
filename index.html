@@ -267,7 +267,7 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v41</span></div>
+    <div class="topbar-sub">Pénétromètre Dynamique Léger <span id="app-ver" style="opacity:0.6;">v42</span></div>
     <div class="topbar-row">
       <div class="topbar-title" id="topbar-title">SP1</div>
       <div class="save-chip" id="save-status">—</div>
@@ -1122,18 +1122,29 @@ function setCoupManual() {
 
 function validerPasse() {
   if (depth() >= S.cfg.profMax) { alert('Profondeur maximale atteinte.'); return; }
+  const avant = depth();                       // profondeur avant cette passe
   const h = hauteurPasseValidee();
-  const p = { d0:depth(), d1:Math.round((depth()+h)*10)/10, h:h,
+  const p = { d0:avant, d1:Math.round((avant+h)*10)/10, h:h,
               c:S.coups, r:false, n:S.tiges, t:new Date().toISOString() };
   _capteurAnnoterPasse(p);
   S.passes.push(p);
   S.coups = 0; _audioResetCount(); _capteurResetRef(); save(); render();
-  // Auto-prompt : ouvrir le modal tiges quand depth atteint (n_tiges × Lt) − 0.1 m
+
+  // Alerte d'ajout de tige, 10 cm avant la fin du train.
+  // On compare les profondeurs RÉELLES avant et après la passe : avec le
+  // pilotage du capteur une passe peut faire 26 cm et sauter par-dessus le
+  // seuil. L'ancien test « depth() − 10 » supposait des passes de 10 cm et
+  // manquait alors l'alerte définitivement.
+  const apres = depth();
   const Lt = S.cfg.Lt || 0.5;
-  const thresholdCm = Math.round(S.tiges * Lt * 100 - 10);
-  if (thresholdCm > 0 && depth() >= thresholdCm && (depth() - 10) < thresholdCm) {
-    if (confirm('Profondeur : ' + (depth()/100).toFixed(2) + ' m atteinte.\n\n' +
-                'Modifier les tiges ?')) {
+  const seuilTigeCm = Math.round(S.tiges * Lt * 100 - 10);
+  if (seuilTigeCm > 0 && apres >= seuilTigeCm && avant < seuilTigeCm) {
+    const depasse = apres > S.tiges * Lt * 100;
+    if (confirm('Profondeur : ' + (apres/100).toFixed(2) + ' m atteinte.\n' +
+                (depasse
+                  ? '⚠ Le train de ' + S.tiges + ' tiges (' + (S.tiges*Lt).toFixed(2) + ' m) est dépassé.\n'
+                  : 'Il reste moins de 10 cm de tige.\n') +
+                '\nModifier les tiges ?')) {
       openTigesModal();
     }
   }
